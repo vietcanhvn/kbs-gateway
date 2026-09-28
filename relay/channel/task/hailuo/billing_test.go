@@ -35,7 +35,7 @@ func TestH3BillingBySecondsAndResolution(t *testing.T) {
 		Metadata: map[string]any{"resolution": "2k", "ratio": "16:9"},
 	})
 	assert.Equal(t, 10.0, ratios["seconds"])
-	assert.Equal(t, 4.0, ratios["resolution"])
+	assert.InDelta(t, 1.625, ratios["resolution"], 1e-9)
 }
 
 func TestH3BillingDefaultsMatchTheRequestSentUpstream(t *testing.T) {
@@ -46,7 +46,7 @@ func TestH3BillingDefaultsMatchTheRequestSentUpstream(t *testing.T) {
 		Metadata: map[string]any{"ratio": "16:9"},
 	})
 	assert.Equal(t, 5.0, ratios["seconds"])
-	assert.Equal(t, 4.0, ratios["resolution"])
+	assert.InDelta(t, 1.625, ratios["resolution"], 1e-9)
 }
 
 func TestOlderHailuoModelsKeepFlatPrice(t *testing.T) {
@@ -61,4 +61,24 @@ func TestH3BillingSkipsInvalidRequests(t *testing.T) {
 		Duration: 30,
 		Metadata: map[string]any{"ratio": "16:9"},
 	}))
+}
+
+func TestH3ServesUnsupportedTiersAtTheNearestOne(t *testing.T) {
+	cases := map[string]string{"480p": "768P", "720p": "768P", "1080p": "2K", "4k": "2K", "2160p": "2K"}
+	for requested, want := range cases {
+		got, err := normalizeH3Resolution(requested)
+		assert.NoError(t, err, requested)
+		assert.Equal(t, want, got, requested)
+	}
+	_, err := normalizeH3Resolution("banana")
+	assert.Error(t, err)
+
+	// Billing follows what is actually rendered: a 1080p request bills as 2K.
+	ratios := estimateFor(t, h3ModelName, relaycommon.TaskSubmitReq{
+		Model:    h3ModelName,
+		Prompt:   "x",
+		Duration: 4,
+		Metadata: map[string]any{"resolution": "1080p", "ratio": "16:9"},
+	})
+	assert.InDelta(t, 1.625, ratios["resolution"], 1e-9)
 }

@@ -9,11 +9,10 @@ import (
 
 // EstimateBilling prices MiniMax-H3 by duration and resolution.
 //
-// The model's configured per-call price is read as "USD per second at 720p";
-// the charge is price × seconds × resolution ratio, with the ratio taken from
-// the shared tiers (768P bills as 720p, 2K as 4× 720p). H3 is priced as a
-// multiple of Seedance, whose tokens scale with pixels × seconds, so using
-// the same pixel ratio keeps that multiple at every resolution.
+// The model's configured per-call price is read as "USD per second at 768P";
+// the charge is price × seconds × resolution ratio. The ratio follows
+// MiniMax's own price list (h3ResolutionPriceRatio: 2K = 1.625× 768P);
+// a tier without a listed price falls back to the shared pixel ratio.
 //
 // The request fixes both duration (4-15 s) and resolution up front, so this
 // estimate is also the final charge. Older Hailuo models keep a flat price.
@@ -30,8 +29,13 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		return nil
 	}
 	tier := taskcommon.NormalizeVideoResolution(h3Req.Resolution, 0, 0)
+	ratio, ok := h3ResolutionPriceRatio[tier]
+	if !ok {
+		// A tier added to h3Resolutions before its price is known: bill by pixels.
+		ratio = taskcommon.VideoResolutionPixelRatio(tier)
+	}
 	return map[string]float64{
 		"seconds":    float64(h3Req.Duration),
-		"resolution": taskcommon.VideoResolutionPixelRatio(tier),
+		"resolution": ratio,
 	}
 }

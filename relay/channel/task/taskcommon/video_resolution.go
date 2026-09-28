@@ -95,3 +95,44 @@ func VideoResolutionPixelRatio(tier string) float64 {
 	}
 	return pixels / videoTierPixels[VideoTier720p]
 }
+
+// videoTierOrder lists the tiers from smallest to largest.
+var videoTierOrder = []string{VideoTier480p, VideoTier720p, VideoTier1080p, VideoTier2K, VideoTier4K}
+
+// NearestVideoTier picks, among the tiers a model supports, the one closest
+// to the requested tier by pixel count (compared as a ratio; a tie goes to
+// the larger tier). Returns "" when nothing is supported or want is unknown.
+//
+// This lets callers keep offering 480p…4k while a model only renders a few:
+// the request is served at the nearest real resolution instead of failing,
+// and adding a tier to the model's list later needs no other change.
+func NearestVideoTier(want string, supported []string) string {
+	wantPixels, ok := videoTierPixels[want]
+	if !ok || len(supported) == 0 {
+		return ""
+	}
+	best, bestScore := "", 0.0
+	for _, tier := range videoTierOrder {
+		if !containsTier(supported, tier) {
+			continue
+		}
+		pixels := videoTierPixels[tier]
+		score := pixels / wantPixels
+		if score < 1 {
+			score = 1 / score
+		}
+		if best == "" || score <= bestScore {
+			best, bestScore = tier, score
+		}
+	}
+	return best
+}
+
+func containsTier(tiers []string, tier string) bool {
+	for _, t := range tiers {
+		if t == tier {
+			return true
+		}
+	}
+	return false
+}

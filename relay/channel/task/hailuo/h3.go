@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/model"
+	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
@@ -249,15 +250,45 @@ func h3MediaLimitError(field string, maximum int) error {
 	return &requestParameterError{field: field, message: fmt.Sprintf("MiniMax-H3 %s supports at most %d items", field, maximum)}
 }
 
+// h3Resolutions: the tiers MiniMax-H3 renders and the label its API expects
+// (MiniMax docs: "Output resolution 768P / 2K"). Other tiers are served at the
+// nearest supported one; when MiniMax adds 1080P / 4K, add them here.
+var h3Resolutions = map[string]string{
+	taskcommon.VideoTier720p: "768P",
+	taskcommon.VideoTier2K:   "2K",
+}
+
+// h3ResolutionPriceRatio: price of each tier relative to 768P, from MiniMax
+// pay-as-you-go rates (2026-09-06: 768P $0.08/s, 2K $0.13/s). The model price
+// set in the gateway is read as USD per second at 768P.
+var h3ResolutionPriceRatio = map[string]float64{
+	taskcommon.VideoTier720p: 1,
+	taskcommon.VideoTier2K:   0.13 / 0.08,
+}
+
+func h3SupportedTiers() []string {
+	tiers := make([]string, 0, len(h3Resolutions))
+	for tier := range h3Resolutions {
+		tiers = append(tiers, tier)
+	}
+	return tiers
+}
+
+// h3TierFor maps a requested resolution (any label or frame size) to the H3
+// tier actually rendered. "" when the request names nothing usable.
+func h3TierFor(value string, width, height int) string {
+	return taskcommon.NearestVideoTier(taskcommon.NormalizeVideoResolution(value, width, height), h3SupportedTiers())
+}
+
 func normalizeH3Resolution(value string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "2k", "1440p":
-		return "2K", nil
-	case "768p", "720p":
-		return "768P", nil
-	default:
+	if strings.TrimSpace(value) == "" {
+		return h3Resolutions[taskcommon.VideoTier2K], nil
+	}
+	tier := h3TierFor(value, 0, 0)
+	if tier == "" {
 		return "", &requestParameterError{field: "metadata.resolution", message: fmt.Sprintf("MiniMax-H3 does not support resolution %q", value)}
 	}
+	return h3Resolutions[tier], nil
 }
 
 func h3AspectRatioFromDimensions(width, height int) string {
@@ -285,10 +316,10 @@ func h3AspectRatioFromDimensions(width, height int) string {
 }
 
 func h3ResolutionFromDimensions(width, height int) string {
-	if min(width, height) <= 768 {
-		return "768P"
+	if tier := h3TierFor("", width, height); tier != "" {
+		return h3Resolutions[tier]
 	}
-	return "2K"
+	return h3Resolutions[taskcommon.VideoTier2K]
 }
 
 func encodeH3TaskID(taskID string) string {

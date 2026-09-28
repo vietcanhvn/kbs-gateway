@@ -41,3 +41,15 @@ func TestVideoResolutionPixelRatio(t *testing.T) {
 	assert.Equal(t, 9.0, VideoResolutionPixelRatio(VideoTier4K))
 	assert.Equal(t, 1.0, VideoResolutionPixelRatio("unknown"))
 }
+
+func TestNearestVideoTier(t *testing.T) {
+	h3 := []string{VideoTier720p, VideoTier2K}
+	assert.Equal(t, VideoTier720p, NearestVideoTier(VideoTier480p, h3))
+	assert.Equal(t, VideoTier720p, NearestVideoTier(VideoTier720p, h3))
+	assert.Equal(t, VideoTier2K, NearestVideoTier(VideoTier1080p, h3)) // 1.78x up vs 2.25x down
+	assert.Equal(t, VideoTier2K, NearestVideoTier(VideoTier4K, h3))
+	// When a model adds 1080p/4k later, requests land there without other changes.
+	assert.Equal(t, VideoTier1080p, NearestVideoTier(VideoTier1080p, append(h3, VideoTier1080p)))
+	assert.Equal(t, "", NearestVideoTier("8k", h3))
+	assert.Equal(t, "", NearestVideoTier(VideoTier720p, nil))
+}

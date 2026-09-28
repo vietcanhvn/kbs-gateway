@@ -103,6 +103,7 @@ const defaultBillingSettings: BillingSettings = {
   WaffoPancakeReturnURL: '',
   WaffoPancakeStoreID: '',
   WaffoPancakeProductID: '',
+  ServerAddress: '',
   PayOSEnabled: false,
   PayOSClientId: '',
   PayOSApiKey: '',

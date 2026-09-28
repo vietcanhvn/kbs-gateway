@@ -200,7 +200,9 @@ const BILLING_SECTIONS = [
           PayOSUnitPrice: settings.PayOSUnitPrice ?? 0,
           PayOSMinTopUp: settings.PayOSMinTopUp ?? 1,
         }}
-        callbackAddress={settings.CustomCallbackAddress}
+        callbackAddress={
+          settings.CustomCallbackAddress || settings.ServerAddress
+        }
         complianceConfirmed={
           (settings['payment_setting.compliance_confirmed'] ?? false) &&
           settings['payment_setting.compliance_terms_version'] === 'v1'

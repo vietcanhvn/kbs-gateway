@@ -330,6 +330,7 @@ export type BillingSettings = {
   // section (saved via /api/option/waffo-pancake/save).
   WaffoPancakeStoreID: string
   WaffoPancakeProductID: string
+  ServerAddress: string
   PayOSEnabled: boolean
   PayOSClientId: string
   PayOSApiKey: string

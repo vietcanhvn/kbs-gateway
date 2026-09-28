@@ -21,6 +21,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { SearchIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Command as CommandPrimitive } from 'cmdk'
+import i18next from 'i18next'
 import * as React from 'react'
 
 import {
@@ -50,8 +51,8 @@ function Command({
 }
 
 function CommandDialog({
-  title = 'Command Palette',
-  description = 'Search for a command to run...',
+  title = i18next.t('Command Palette'),
+  description = i18next.t('Search for a command to run...'),
   children,
   className,
   showCloseButton = false,

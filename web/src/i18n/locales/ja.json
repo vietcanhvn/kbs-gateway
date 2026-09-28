@@ -5280,6 +5280,9 @@
     "VND per 1 unit of balance": "VND per 1 unit of balance",
     "Exchange rate charged for each unit topped up (e.g. 26000 = 26,000 ₫ per $1). 0 keeps payOS off.": "Exchange rate charged for each unit topped up (e.g. 26000 = 26,000 ₫ per $1). 0 keeps payOS off.",
     "Minimum top-up": "Minimum top-up",
-    "In the payOS dashboard, set the payment channel webhook to:": "In the payOS dashboard, set the payment channel webhook to:"
+    "In the payOS dashboard, set the payment channel webhook to:": "In the payOS dashboard, set the payment channel webhook to:",
+    "Toggle Sidebar": "Toggle Sidebar",
+    "Command Palette": "Command Palette",
+    "Search for a command to run...": "Search for a command to run..."
   }
 }

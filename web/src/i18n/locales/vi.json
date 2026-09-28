@@ -5283,6 +5283,9 @@
     "In the payOS dashboard, set the payment channel webhook to:": "Trong trang quản lý payOS, đặt webhook của kênh thanh toán là:",
     "{{count}} model(s)": "{{count}} mô hình",
     "Resize column": "Đổi độ rộng cột",
-    "OAuth": "OAuth"
+    "OAuth": "OAuth",
+    "Toggle Sidebar": "Ẩn/hiện thanh bên",
+    "Command Palette": "Bảng lệnh",
+    "Search for a command to run...": "Tìm lệnh để chạy..."
   }
 }

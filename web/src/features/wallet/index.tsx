@@ -41,6 +41,7 @@ import {
   useCreemPayment,
   useWaffoPayment,
   useWaffoPancakePayment,
+  usePayOSPayment,
 } from './hooks'
 import {
   getDefaultPaymentType,
@@ -90,6 +91,13 @@ export function Wallet(props: WalletProps) {
       ? 1
       : currency?.usdExchangeRate || 1
   }, [currency?.quotaDisplayType, currency?.usdExchangeRate])
+  // Chỉ có payOS: giá các mức nạp tính bằng VND theo tỉ giá payOS.
+  const payosOnly =
+    !!topupInfo?.enable_payos_topup &&
+    !topupInfo?.enable_online_topup &&
+    !topupInfo?.enable_stripe_topup &&
+    !topupInfo?.enable_waffo_topup &&
+    !topupInfo?.enable_waffo_pancake_topup
   const {
     amount: paymentAmount,
     calculating,
@@ -108,6 +116,8 @@ export function Wallet(props: WalletProps) {
   const { processing: waffoProcessing, processWaffoPayment } = useWaffoPayment()
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
+  const { processing: payosProcessing, processPayOSPayment } =
+    usePayOSPayment()
 
   // Fetch and refresh user data
   const fetchUser = useCallback(async () => {
@@ -202,6 +212,7 @@ export function Wallet(props: WalletProps) {
         regular: processPayment,
         waffo: processWaffoPayment,
         waffoPancake: processWaffoPancakePayment,
+        payos: processPayOSPayment,
       }
     )
 
@@ -315,8 +326,14 @@ export function Wallet(props: WalletProps) {
                   redeeming={redeeming}
                   topupLink={topupInfo?.topup_link}
                   loading={topupLoading}
-                  priceRatio={(status?.price as number) || 1}
+                  priceRatio={
+                    payosOnly
+                      ? topupInfo?.payos_unit_price || 1
+                      : (status?.price as number) || 1
+                  }
                   usdExchangeRate={effectiveUsdExchangeRate}
+                  payCurrencySuffix={payosOnly ? ' ₫' : ''}
+                  amountPrefix={payosOnly ? '$' : ''}
                   onOpenBilling={() => setBillingDialogOpen(true)}
                   creemProducts={topupInfo?.creem_products}
                   enableCreemTopup={topupInfo?.enable_creem_topup}
@@ -360,7 +377,9 @@ export function Wallet(props: WalletProps) {
         paymentAmount={paymentAmount}
         paymentMethod={selectedPaymentMethod}
         calculating={calculating}
-        processing={processing || waffoProcessing || pancakeProcessing}
+        processing={
+          processing || waffoProcessing || pancakeProcessing || payosProcessing
+        }
         discountRate={getDiscountRate()}
         usdExchangeRate={effectiveUsdExchangeRate}
       />

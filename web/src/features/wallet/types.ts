@@ -148,6 +148,10 @@ export interface TopupInfo {
   waffo_min_topup?: number
   /** Whether Waffo Pancake topup is enabled */
   enable_waffo_pancake_topup?: boolean
+  enable_payos_topup?: boolean
+  payos_min_topup?: number
+  /** VND cho 1 đơn vị số dư */
+  payos_unit_price?: number
   /** Minimum topup amount for Waffo Pancake */
   waffo_pancake_min_topup?: number
   /** Whether redemption code usage is enabled */
@@ -199,6 +203,19 @@ export interface WaffoPaymentRequest {
 /**
  * Waffo Pancake payment request parameters
  */
+/** payOS (chuyển khoản VietQR) - tạo link thanh toán */
+export interface PayOSPaymentRequest {
+  amount: number
+}
+
+export type PayOSPaymentResponse = ApiResponse<
+  | {
+      payment_url?: string
+      order_id?: string
+    }
+  | string
+>
+
 export interface WaffoPancakePaymentRequest {
   /** Topup amount */
   amount: number

@@ -29,6 +29,16 @@ func GetTopUpInfo(c *gin.Context) {
 	payMethods := operation_setting.PayMethods
 	if !complianceConfirmed {
 		payMethods = []map[string]string{}
+	} else if !isEpayTopUpEnabled() {
+		// Danh sách mặc định (Alipay, WeChat, custom1) là các loại của Epay: Epay
+		// chưa cài thì bấm vào chỉ báo lỗi, nên chỉ giữ loại có cổng riêng.
+		payMethods = lo.Filter(payMethods, func(method map[string]string, _ int) bool {
+			switch method["type"] {
+			case model.PaymentMethodStripe, model.PaymentMethodCreem, model.PaymentMethodWaffo, model.PaymentMethodWaffoPancake, model.PaymentMethodPayOS:
+				return true
+			}
+			return false
+		})
 	}
 
 	// 如果启用了 Stripe 支付，添加到支付方法列表
@@ -50,6 +60,26 @@ func GetTopUpInfo(c *gin.Context) {
 				"min_topup": strconv.Itoa(setting.StripeMinTopUp),
 			}
 			payMethods = append(payMethods, stripeMethod)
+		}
+	}
+
+	// payOS: chuyển khoản QR ngân hàng Việt Nam, đứng đầu danh sách.
+	enablePayOS := isPayOSTopUpEnabled()
+	if enablePayOS {
+		hasPayOS := false
+		for _, method := range payMethods {
+			if method["type"] == model.PaymentMethodPayOS {
+				hasPayOS = true
+				break
+			}
+		}
+		if !hasPayOS {
+			payMethods = append([]map[string]string{{
+				"name":      "Chuyển khoản QR (payOS)",
+				"type":      model.PaymentMethodPayOS,
+				"color":     "#16A34A",
+				"min_topup": strconv.Itoa(setting.PayOSMinTopUp),
+			}}, payMethods...)
 		}
 	}
 
@@ -102,6 +132,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_creem_topup":               isCreemTopUpEnabled(),
 		"enable_waffo_topup":               enableWaffo,
 		"enable_waffo_pancake_topup":       enableWaffoPancake,
+		"enable_payos_topup":               enablePayOS,
 		"enable_redemption":                complianceConfirmed,
 		"payment_compliance_confirmed":     complianceConfirmed,
 		"payment_compliance_terms_version": operation_setting.CurrentComplianceTermsVersion,
@@ -117,6 +148,8 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":        setting.StripeMinTopUp,
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
+		"payos_min_topup":         setting.PayOSMinTopUp,
+		"payos_unit_price":        setting.PayOSUnitPrice,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":              common.TopUpLink,

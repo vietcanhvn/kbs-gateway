@@ -32,7 +32,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatLocalCurrencyAmount } from '@/lib/currency'
 
-import { DEFAULT_DISCOUNT_RATE } from '../../constants'
+import { DEFAULT_DISCOUNT_RATE, PAYMENT_TYPES } from '../../constants'
 import { formatCurrency, getPaymentIcon } from '../../lib'
 import type { PaymentMethod } from '../../types'
 
@@ -65,6 +65,8 @@ export function PaymentConfirmDialog({
   const hasDiscount = discountRate > 0 && discountRate < 1 && paymentAmount > 0
   const originalAmount = hasDiscount ? paymentAmount / discountRate : 0
   const discountAmount = hasDiscount ? originalAmount - paymentAmount : 0
+  // payOS báo giá bằng VND; các cổng khác giữ như cũ (không có ký hiệu).
+  const paySuffix = paymentMethod?.type === PAYMENT_TYPES.PAYOS ? ' ₫' : ''
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -102,10 +104,12 @@ export function PaymentConfirmDialog({
               <div className='flex items-baseline gap-2'>
                 <span className='text-2xl font-semibold'>
                   {formatCurrency(paymentAmount)}
+                  {paySuffix}
                 </span>
                 {hasDiscount && (
                   <span className='text-muted-foreground text-sm line-through'>
                     {formatCurrency(originalAmount)}
+                    {paySuffix}
                   </span>
                 )}
               </div>
@@ -118,6 +122,7 @@ export function PaymentConfirmDialog({
                 <span className='text-muted-foreground'>{t('You save')}</span>
                 <span className='font-semibold text-green-600'>
                   {formatCurrency(discountAmount)}
+                  {paySuffix}
                 </span>
               </div>
             </div>

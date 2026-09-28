@@ -42,9 +42,30 @@ describe('payment amount routing', () => {
         calls.push('pancake')
         return { success: true, data: '4' }
       },
+      payos: async () => {
+        calls.push('payos')
+        return { success: true, data: '260000' }
+      },
     })
 
     assert.equal(amount, 18.75)
     assert.deepEqual(calls, ['waffo:120'])
+  })
+})
+
+describe('payOS amount routing', () => {
+  test('uses the payOS calculator (VND)', async () => {
+    const amount = await requestPaymentAmount(10, PAYMENT_TYPES.PAYOS, {
+      regular: async () => ({ success: true, data: '1' }),
+      stripe: async () => ({ success: true, data: '2' }),
+      waffo: async () => ({ success: true, data: '3' }),
+      waffoPancake: async () => ({ success: true, data: '4' }),
+      payos: async (request) => ({
+        success: true,
+        data: String(request.amount * 26000),
+      }),
+    })
+
+    assert.equal(amount, 260000)
   })
 })

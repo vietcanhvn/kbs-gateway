@@ -93,10 +93,18 @@ export function isWaffoPancakePayment(paymentType: string): boolean {
   return paymentType === PAYMENT_TYPES.WAFFO_PANCAKE
 }
 
+/**
+ * Check if payment method is payOS (Vietnamese bank transfer via VietQR)
+ */
+export function isPayOSPayment(paymentType: string): boolean {
+  return paymentType === PAYMENT_TYPES.PAYOS
+}
+
 export interface PaymentProcessors {
   regular: (topupAmount: number, paymentType: string) => Promise<boolean>
   waffo: (topupAmount: number, payMethodIndex: number) => Promise<boolean>
   waffoPancake: (topupAmount: number) => Promise<boolean>
+  payos: (topupAmount: number) => Promise<boolean>
 }
 
 export async function dispatchSelectedPayment(
@@ -114,6 +122,10 @@ export async function dispatchSelectedPayment(
 
   if (isWaffoPancakePayment(paymentMethod.type)) {
     return processors.waffoPancake(topupAmount)
+  }
+
+  if (isPayOSPayment(paymentMethod.type)) {
+    return processors.payos(topupAmount)
   }
 
   return processors.regular(topupAmount, paymentMethod.type)
@@ -157,6 +169,10 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
 
   if (topupInfo.enable_online_topup) {
     return topupInfo.min_topup
+  }
+
+  if (topupInfo.enable_payos_topup) {
+    return topupInfo.payos_min_topup || DEFAULT_MIN_TOPUP
   }
 
   if (topupInfo.enable_stripe_topup) {

@@ -108,3 +108,18 @@ func isEpayWebhookConfigured() bool {
 func isEpayWebhookEnabled() bool {
 	return isEpayTopUpEnabled()
 }
+
+func isPayOSTopUpEnabled() bool {
+	if !isPaymentComplianceConfirmed() {
+		return false
+	}
+	return setting.PayOSEnabled &&
+		strings.TrimSpace(setting.PayOSClientId) != "" &&
+		strings.TrimSpace(setting.PayOSApiKey) != "" &&
+		strings.TrimSpace(setting.PayOSChecksumKey) != "" &&
+		setting.PayOSUnitPrice > 0
+}
+
+func isPayOSWebhookEnabled() bool {
+	return isPayOSTopUpEnabled()
+}

@@ -29,6 +29,7 @@ const (
 	PaymentMethodCreem        = "creem"
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
+	PaymentMethodPayOS        = "payos"
 	PaymentMethodBalance      = "balance"
 )
 
@@ -38,6 +39,7 @@ const (
 	PaymentProviderCreem        = "creem"
 	PaymentProviderWaffo        = "waffo"
 	PaymentProviderWaffoPancake = "waffo_pancake"
+	PaymentProviderPayOS        = "payos"
 	PaymentProviderBalance      = "balance"
 )
 
@@ -45,6 +47,7 @@ var (
 	ErrPaymentMethodMismatch = errors.New("payment method mismatch")
 	ErrTopUpNotFound         = errors.New("topup not found")
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
+	ErrPaymentAmountMismatch = errors.New("paid amount lower than order amount")
 )
 
 func (topUp *TopUp) Insert() error {
@@ -656,4 +659,77 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 	}
 
 	return nil
+}
+
+// RechargePayOS hoàn tất đơn payOS trong một giao dịch: khoá dòng đơn, kiểm tra
+// trạng thái và số tiền đã trả, cộng hạn mức. Webhook gửi lặp hay trang quay về
+// kiểm tra lại cùng lúc thì cũng chỉ cộng một lần (alreadyDone=true lần sau).
+//
+// paidVND là số tiền payOS xác nhận đã nhận; thấp hơn giá đơn (Money, VND) thì
+// từ chối - không cộng hạn mức cho khoản chuyển thiếu.
+func RechargePayOS(tradeNo string, paidVND int64, callerIp string) (alreadyDone bool, err error) {
+	if tradeNo == "" {
+		return false, errors.New("未提供支付单号")
+	}
+
+	refCol := "`trade_no`"
+	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
+		refCol = `"trade_no"`
+	}
+
+	var quotaToAdd int
+	topUp := &TopUp{}
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if topUp.PaymentProvider != PaymentProviderPayOS {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.Status == common.TopUpStatusSuccess {
+			alreadyDone = true
+			return nil
+		}
+		if topUp.Status != common.TopUpStatusPending && topUp.Status != common.TopUpStatusExpired {
+			return ErrTopUpStatusInvalid
+		}
+		if decimal.NewFromInt(paidVND).LessThan(decimal.NewFromFloat(topUp.Money).Round(0)) {
+			return ErrPaymentAmountMismatch
+		}
+		var quotaErr error
+		quotaToAdd, quotaErr = common.QuotaFromDecimalStrict(
+			decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
+		)
+		if quotaErr != nil || quotaToAdd <= 0 {
+			return errors.New("无效的充值额度")
+		}
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		result := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if !errors.Is(err, ErrTopUpNotFound) && !errors.Is(err, ErrPaymentMethodMismatch) &&
+			!errors.Is(err, ErrTopUpStatusInvalid) && !errors.Is(err, ErrPaymentAmountMismatch) {
+			common.SysError("payos topup failed: " + err.Error())
+		}
+		return false, err
+	}
+	if alreadyDone {
+		return true, nil
+	}
+	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "payos topup")
+
+	common.SysLog(fmt.Sprintf("payOS nạp tiền thành công trade_no=%s user_id=%d quota_to_add=%d money_vnd=%.0f paid_vnd=%d", topUp.TradeNo, topUp.UserId, quotaToAdd, topUp.Money, paidVND))
+	RecordTopupLog(topUp.UserId, fmt.Sprintf("Nạp tiền qua payOS thành công, hạn mức: %v, số tiền: %.0f VND", logger.LogQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentProviderPayOS)
+	return false, nil
 }

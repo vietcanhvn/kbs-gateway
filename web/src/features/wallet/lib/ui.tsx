@@ -98,6 +98,18 @@ export function getPaymentIcon(
   }
 
   switch (paymentType) {
+    case PAYMENT_TYPES.PAYOS:
+      // Logo VietQR (chữ ngang): giữ chiều cao của ô, chiều rộng theo tỉ lệ ảnh.
+      return (
+        <img
+          src='/pay-vietqr.png'
+          alt='VietQR'
+          className={className}
+          style={{ width: 'auto', objectFit: 'contain' }}
+          loading='lazy'
+          decoding='async'
+        />
+      )
     case PAYMENT_TYPES.ALIPAY:
       return (
         <SiAlipay

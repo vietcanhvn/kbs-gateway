@@ -53,6 +53,27 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	// payOS: chuyển khoản QR ngân hàng Việt Nam, đứng đầu danh sách.
+	enablePayOS := isPayOSTopUpEnabled()
+	if enablePayOS {
+		hasPayOS := false
+		for _, method := range payMethods {
+			if method["type"] == model.PaymentMethodPayOS {
+				hasPayOS = true
+				break
+			}
+		}
+		if !hasPayOS {
+			payMethods = append([]map[string]string{{
+				"name":      "Chuyển khoản QR (payOS)",
+				"type":      model.PaymentMethodPayOS,
+				"color":     "#16A34A",
+				"icon":      "BsQrCode",
+				"min_topup": strconv.Itoa(setting.PayOSMinTopUp),
+			}}, payMethods...)
+		}
+	}
+
 	// Waffo Pancake is displayed above the standard Waffo gateway.
 	enableWaffoPancake := isWaffoPancakeTopUpEnabled()
 	if enableWaffoPancake {
@@ -102,6 +123,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_creem_topup":               isCreemTopUpEnabled(),
 		"enable_waffo_topup":               enableWaffo,
 		"enable_waffo_pancake_topup":       enableWaffoPancake,
+		"enable_payos_topup":               enablePayOS,
 		"enable_redemption":                complianceConfirmed,
 		"payment_compliance_confirmed":     complianceConfirmed,
 		"payment_compliance_terms_version": operation_setting.CurrentComplianceTermsVersion,
@@ -117,6 +139,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":        setting.StripeMinTopUp,
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
+		"payos_min_topup":         setting.PayOSMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":              common.TopUpLink,

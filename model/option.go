@@ -93,6 +93,12 @@ func InitOptionMap() {
 	common.OptionMap["CreemProducts"] = setting.CreemProducts
 	common.OptionMap["CreemTestMode"] = strconv.FormatBool(setting.CreemTestMode)
 	common.OptionMap["CreemWebhookSecret"] = setting.CreemWebhookSecret
+	common.OptionMap["PayOSEnabled"] = strconv.FormatBool(setting.PayOSEnabled)
+	common.OptionMap["PayOSClientId"] = setting.PayOSClientId
+	common.OptionMap["PayOSApiKey"] = setting.PayOSApiKey
+	common.OptionMap["PayOSChecksumKey"] = setting.PayOSChecksumKey
+	common.OptionMap["PayOSUnitPrice"] = strconv.FormatFloat(setting.PayOSUnitPrice, 'f', -1, 64)
+	common.OptionMap["PayOSMinTopUp"] = strconv.Itoa(setting.PayOSMinTopUp)
 	common.OptionMap["WaffoEnabled"] = strconv.FormatBool(setting.WaffoEnabled)
 	common.OptionMap["WaffoApiKey"] = setting.WaffoApiKey
 	common.OptionMap["WaffoPrivateKey"] = setting.WaffoPrivateKey
@@ -451,6 +457,18 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.CreemTestMode = value == "true"
 	case "CreemWebhookSecret":
 		setting.CreemWebhookSecret = value
+	case "PayOSEnabled":
+		setting.PayOSEnabled = value == "true"
+	case "PayOSClientId":
+		setting.PayOSClientId = value
+	case "PayOSApiKey":
+		setting.PayOSApiKey = value
+	case "PayOSChecksumKey":
+		setting.PayOSChecksumKey = value
+	case "PayOSUnitPrice":
+		setting.PayOSUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "PayOSMinTopUp":
+		setting.PayOSMinTopUp, _ = strconv.Atoi(value)
 	case "WaffoEnabled":
 		setting.WaffoEnabled = value == "true"
 	case "WaffoApiKey":

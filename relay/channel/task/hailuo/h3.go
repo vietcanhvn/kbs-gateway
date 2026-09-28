@@ -258,14 +258,6 @@ var h3Resolutions = map[string]string{
 	taskcommon.VideoTier2K:   "2K",
 }
 
-// h3ResolutionPriceRatio: price of each tier relative to 768P, from MiniMax
-// pay-as-you-go rates (2026-09-06: 768P $0.08/s, 2K $0.13/s). The model price
-// set in the gateway is read as USD per second at 768P.
-var h3ResolutionPriceRatio = map[string]float64{
-	taskcommon.VideoTier720p: 1,
-	taskcommon.VideoTier2K:   0.13 / 0.08,
-}
-
 func h3SupportedTiers() []string {
 	tiers := make([]string, 0, len(h3Resolutions))
 	for tier := range h3Resolutions {

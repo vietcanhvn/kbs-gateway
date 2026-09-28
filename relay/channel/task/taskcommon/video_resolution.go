@@ -136,3 +136,37 @@ func containsTier(tiers []string, tier string) bool {
 	}
 	return false
 }
+
+// MiniMax-H3 price of each tier relative to 768P (the 720p tier), shared by the
+// MiniMax API channel (hailuo) and self-hosted ComfyUI H3 workflows.
+//
+// Listed MiniMax pay-as-you-go rates (2026-09-06): H3 768P $0.08/s, 2K $0.13/s;
+// H3 Max 480P $0.05/s. 1080p and 4k have no MiniMax price yet: estimated on a
+// log-pixel line through 768P and 2K - replace when MiniMax publishes them.
+var miniMaxH3ResolutionPriceRatio = map[string]float64{
+	VideoTier480p:  0.05 / 0.08,
+	VideoTier720p:  1,
+	VideoTier1080p: 1.34, // estimate
+	VideoTier2K:    0.13 / 0.08,
+	VideoTier4K:    2.03, // estimate
+}
+
+// MiniMaxH3ResolutionPriceRatio returns the H3 price ratio for a tier (1 for unknown).
+func MiniMaxH3ResolutionPriceRatio(tier string) float64 {
+	if ratio, ok := miniMaxH3ResolutionPriceRatio[tier]; ok {
+		return ratio
+	}
+	return 1
+}
+
+var miniMaxH3Name = regexp.MustCompile(`(?i)minimax[-_. ]?h3`)
+
+// IsMiniMaxH3Model matches MiniMax-H3 by name ("MiniMax-H3", "minimax-h3-flf"...).
+func IsMiniMaxH3Model(names ...string) bool {
+	for _, name := range names {
+		if miniMaxH3Name.MatchString(name) {
+			return true
+		}
+	}
+	return false
+}

@@ -22,6 +22,7 @@ import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
+import { PayOSSettingsSection } from '../integrations/payos-settings-section'
 import { RatioSettingsCard } from '../models/ratio-settings-card'
 import type { BillingSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
@@ -185,6 +186,25 @@ const BILLING_SECTIONS = [
           confirmedAt: settings['payment_setting.compliance_confirmed_at'] ?? 0,
           confirmedBy: settings['payment_setting.compliance_confirmed_by'] ?? 0,
         }}
+      />
+    ),
+  },
+  {
+    id: 'payos',
+    titleKey: 'payOS (VietQR)',
+    build: (settings: BillingSettings) => (
+      <PayOSSettingsSection
+        defaultValues={{
+          PayOSEnabled: settings.PayOSEnabled ?? false,
+          PayOSClientId: settings.PayOSClientId ?? '',
+          PayOSUnitPrice: settings.PayOSUnitPrice ?? 0,
+          PayOSMinTopUp: settings.PayOSMinTopUp ?? 1,
+        }}
+        callbackAddress={settings.CustomCallbackAddress}
+        complianceConfirmed={
+          (settings['payment_setting.compliance_confirmed'] ?? false) &&
+          settings['payment_setting.compliance_terms_version'] === 'v1'
+        }
       />
     ),
   },

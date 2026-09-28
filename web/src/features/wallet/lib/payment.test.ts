@@ -57,6 +57,10 @@ describe('payment dispatch', () => {
           calls.push('pancake')
           return false
         },
+        payos: async () => {
+          calls.push('payos')
+          return false
+        },
       }
     )
 
@@ -77,10 +81,37 @@ describe('payment dispatch', () => {
           return true
         },
         waffoPancake: async () => false,
+        payos: async () => false,
       }
     )
 
     assert.equal(success, false)
     assert.equal(called, false)
+  })
+})
+
+describe('payOS dispatch', () => {
+  test('routes payOS to its own processor', async () => {
+    const calls: string[] = []
+    const success = await dispatchSelectedPayment(
+      { name: 'Chuyển khoản QR (payOS)', type: PAYMENT_TYPES.PAYOS },
+      10,
+      null,
+      {
+        regular: async () => {
+          calls.push('regular')
+          return false
+        },
+        waffo: async () => false,
+        waffoPancake: async () => false,
+        payos: async (amount) => {
+          calls.push(`payos:${amount}`)
+          return true
+        },
+      }
+    )
+
+    assert.equal(success, true)
+    assert.deepEqual(calls, ['payos:10'])
   })
 })

@@ -5270,6 +5270,16 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "payOS (VietQR)": "payOS (VietQR)",
+    "Save payOS settings": "Lưu cài đặt payOS",
+    "Online payments stay hidden until the payment compliance terms are confirmed in Payment Gateway.": "Thanh toán trực tuyến chỉ hiện sau khi xác nhận điều khoản tuân thủ ở mục Cổng thanh toán.",
+    "Enable payOS bank transfer top-up": "Bật nạp tiền bằng chuyển khoản qua payOS",
+    "Users scan a VietQR code with their banking app; the balance is credited automatically once payOS confirms the transfer.": "Người dùng quét mã VietQR bằng app ngân hàng; số dư được cộng tự động khi payOS xác nhận đã nhận tiền.",
+    "Leave empty to keep the saved key": "Để trống để giữ key đã lưu",
+    "VND per 1 unit of balance": "Số VND cho 1 đơn vị số dư",
+    "Exchange rate charged for each unit topped up (e.g. 26000 = 26,000 ₫ per $1). 0 keeps payOS off.": "Tỉ giá thu cho mỗi đơn vị nạp (vd 26000 = 26.000 ₫ cho $1). Để 0 thì payOS chưa bật.",
+    "Minimum top-up": "Nạp tối thiểu",
+    "In the payOS dashboard, set the payment channel webhook to:": "Trong trang quản lý payOS, đặt webhook của kênh thanh toán là:"
   }
 }

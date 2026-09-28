@@ -39,6 +39,8 @@ import type {
   WaffoPaymentResponse,
   WaffoPancakePaymentRequest,
   WaffoPancakePaymentResponse,
+  PayOSPaymentRequest,
+  PayOSPaymentResponse,
 } from './types'
 
 // ============================================================================
@@ -152,6 +154,30 @@ export async function requestWaffoPayment(
   request: WaffoPaymentRequest
 ): Promise<WaffoPaymentResponse> {
   const res = await api.post('/api/user/waffo/pay', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * Calculate payment amount (VND) for payOS bank transfer
+ */
+export async function calculatePayOSAmount(
+  request: AmountRequest
+): Promise<AmountResponse> {
+  const res = await api.post('/api/user/payos/amount', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * Request payOS payment link (VietQR checkout page)
+ */
+export async function requestPayOSPayment(
+  request: PayOSPaymentRequest
+): Promise<PayOSPaymentResponse> {
+  const res = await api.post('/api/user/payos/pay', request, {
     skipBusinessError: true,
   } as Record<string, unknown>)
   return res.data

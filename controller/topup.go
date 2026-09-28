@@ -78,7 +78,6 @@ func GetTopUpInfo(c *gin.Context) {
 				"name":      "Chuyển khoản QR (payOS)",
 				"type":      model.PaymentMethodPayOS,
 				"color":     "#16A34A",
-				"icon":      "BsQrCode",
 				"min_topup": strconv.Itoa(setting.PayOSMinTopUp),
 			}}, payMethods...)
 		}

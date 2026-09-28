@@ -366,7 +366,7 @@ export function RechargeFormCard({
                             getPaymentIcon(
                               method.type,
                               method.type === PAYMENT_TYPES.PAYOS
-                                ? 'h-6 w-6'
+                                ? 'h-6'
                                 : 'h-4 w-4',
                               method.icon,
                               method.name

@@ -219,3 +219,35 @@ func TestGetPayOSPayMoneyRoundsUpToWholeDong(t *testing.T) {
 	setting.PayOSUnitPrice = 26000.5
 	require.Equal(t, int64(260005), getPayOSPayMoney(10, "default"))
 }
+
+func TestTopUpInfoListsPayOSAndHidesUnconfiguredEpayMethods(t *testing.T) {
+	setupPayOSTest(t)
+	previousMethods := operation_setting.PayMethods
+	previousPayAddress := operation_setting.PayAddress
+	t.Cleanup(func() {
+		operation_setting.PayMethods = previousMethods
+		operation_setting.PayAddress = previousPayAddress
+	})
+	operation_setting.PayAddress = "" // Epay chưa cài
+	operation_setting.PayMethods = []map[string]string{
+		{"name": "支付宝", "type": "alipay"},
+		{"name": "微信", "type": "wxpay"},
+	}
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/topup/info", nil)
+	GetTopUpInfo(ctx)
+
+	var body struct {
+		Data struct {
+			EnablePayOS bool                `json:"enable_payos_topup"`
+			PayMethods  []map[string]string `json:"pay_methods"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.True(t, body.Data.EnablePayOS)
+	require.Len(t, body.Data.PayMethods, 1)
+	require.Equal(t, model.PaymentMethodPayOS, body.Data.PayMethods[0]["type"])
+}

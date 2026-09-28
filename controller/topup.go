@@ -29,6 +29,16 @@ func GetTopUpInfo(c *gin.Context) {
 	payMethods := operation_setting.PayMethods
 	if !complianceConfirmed {
 		payMethods = []map[string]string{}
+	} else if !isEpayTopUpEnabled() {
+		// Danh sách mặc định (Alipay, WeChat, custom1) là các loại của Epay: Epay
+		// chưa cài thì bấm vào chỉ báo lỗi, nên chỉ giữ loại có cổng riêng.
+		payMethods = lo.Filter(payMethods, func(method map[string]string, _ int) bool {
+			switch method["type"] {
+			case model.PaymentMethodStripe, model.PaymentMethodCreem, model.PaymentMethodWaffo, model.PaymentMethodWaffoPancake, model.PaymentMethodPayOS:
+				return true
+			}
+			return false
+		})
 	}
 
 	// 如果启用了 Stripe 支付，添加到支付方法列表

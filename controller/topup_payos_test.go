@@ -210,6 +210,7 @@ func TestPayOSReturnChecksStatusWithPayOS(t *testing.T) {
 	PayOSReturn(ctx)
 
 	require.Equal(t, http.StatusFound, recorder.Code)
+	require.Equal(t, "/wallet?show_history=true", recorder.Header().Get("Location"))
 	require.Equal(t, int(10*common.QuotaPerUnit), userQuota(t, db))
 }
 

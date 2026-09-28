@@ -398,7 +398,9 @@ func PayOSWebhook(c *gin.Context) {
 // PayOSReturn: trình duyệt quay về từ trang payOS. Không tin tham số trên URL -
 // gateway tự hỏi payOS trạng thái đơn, trả đủ thì cộng, rồi chuyển về trang ví.
 func PayOSReturn(c *gin.Context) {
-	target := paymentReturnPath("/wallet?show_history=true")
+	// Đường dẫn tương đối: trình duyệt đang ở đúng máy chủ vừa nhận lượt quay về
+	// (localhost khi thử, tên miền thật khi chạy), nên về trang ví của chính máy đó.
+	target := "/wallet?show_history=true"
 	orderCode, err := strconv.ParseInt(c.Query("orderCode"), 10, 64)
 	if err != nil || orderCode <= 0 || orderCode > payOSMaxOrderCode || !isPayOSTopUpEnabled() {
 		c.Redirect(http.StatusFound, target)

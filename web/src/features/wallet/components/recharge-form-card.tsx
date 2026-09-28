@@ -37,6 +37,7 @@ import {
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import { PAYMENT_TYPES } from '../constants'
 import {
   formatCurrency,
   getDiscountLabel,
@@ -72,6 +73,10 @@ interface RechargeFormCardProps {
   loading?: boolean
   priceRatio?: number
   usdExchangeRate?: number
+  /** Ký hiệu tiền phải trả (vd ' ₫' khi chỉ có payOS) */
+  payCurrencySuffix?: string
+  /** Ký hiệu số dư trước mức nạp (vd '$') */
+  amountPrefix?: string
   onOpenBilling?: () => void
   creemProducts?: CreemProduct[]
   enableCreemTopup?: boolean
@@ -102,6 +107,8 @@ export function RechargeFormCard({
   loading,
   priceRatio = 1,
   usdExchangeRate = 1,
+  payCurrencySuffix = '',
+  amountPrefix = '',
   onOpenBilling,
   creemProducts,
   enableCreemTopup,
@@ -258,6 +265,7 @@ export function RechargeFormCard({
                         >
                           <div className='flex w-full items-center justify-between'>
                             <div className='text-base font-semibold sm:text-lg'>
+                              {amountPrefix}
                               {formatNumber(displayValue)}
                             </div>
                             {hasDiscount && (
@@ -267,11 +275,13 @@ export function RechargeFormCard({
                             )}
                           </div>
                           <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
-                            Pay {formatCurrency(actualPrice)}
+                            {t('Pay')} {formatCurrency(actualPrice)}
+                            {payCurrencySuffix}
                             {hasDiscount && savedAmount > 0 && (
                               <span className='text-green-600'>
                                 {' '}
-                                • Save {formatCurrency(savedAmount)}
+                                • {t('You save')} {formatCurrency(savedAmount)}
+                                {payCurrencySuffix}
                               </span>
                             )}
                           </div>
@@ -308,6 +318,7 @@ export function RechargeFormCard({
                     ) : (
                       <span className='text-sm font-semibold'>
                         {formatCurrency(paymentAmount)}
+                        {payCurrencySuffix}
                       </span>
                     )}
                   </div>
@@ -354,7 +365,9 @@ export function RechargeFormCard({
                           ) : (
                             getPaymentIcon(
                               method.type,
-                              'h-4 w-4',
+                              method.type === PAYMENT_TYPES.PAYOS
+                                ? 'h-6 w-6'
+                                : 'h-4 w-4',
                               method.icon,
                               method.name
                             )

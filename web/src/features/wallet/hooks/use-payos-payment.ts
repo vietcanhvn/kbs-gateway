@@ -53,7 +53,9 @@ export function usePayOSPayment() {
       if (isApiSuccess(response)) {
         const paymentUrl = getPaymentUrl(response.data)
         if (paymentUrl) {
-          window.open(paymentUrl, '_blank')
+          // Cùng tab: mở tab mới sau khi chờ máy chủ bị trình duyệt chặn
+          // (popup), và payOS sẽ đưa người dùng quay về trang ví.
+          window.location.assign(paymentUrl)
           toast.success(i18next.t('Redirecting to payment page...'))
           return true
         }

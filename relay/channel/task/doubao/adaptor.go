@@ -144,6 +144,10 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	hasVideo := hasVideoInMetadata(req.Metadata)
 	resolution, _ := req.Metadata["resolution"].(string)
 	ratio, ok := GetVideoInputRatio(info.OriginModelName, resolution, hasVideo)
+	if !ok {
+		// The gateway name may be an alias; the mapped upstream ID can still match.
+		ratio, ok = GetVideoInputRatio(info.UpstreamModelName, resolution, hasVideo)
+	}
 	if !ok || ratio == 1.0 {
 		return nil
 	}

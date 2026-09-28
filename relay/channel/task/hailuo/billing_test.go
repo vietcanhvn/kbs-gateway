@@ -14,8 +14,7 @@ func estimateFor(t *testing.T, upstreamModel string, req relaycommon.TaskSubmitR
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Set("task_request", req)
-	info := &relaycommon.RelayInfo{}
-	info.UpstreamModelName = upstreamModel
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: upstreamModel}}
 	return (&TaskAdaptor{}).EstimateBilling(ctx, info)
 }
 

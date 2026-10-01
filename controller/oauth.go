@@ -366,6 +366,10 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if affiliateCode != "" {
 		inviterId, _ = model.GetUserIdByAffCode(affiliateCode)
 	}
+	// Ghi người mời vào tài khoản mới, như đăng ký bằng mật khẩu: hoa hồng giới
+	// thiệu theo tiền nạp về sau tra người mời từ cột này. Trước đây đăng ký qua
+	// OAuth chỉ trả thưởng đăng ký mà không lưu ai đã mời.
+	user.InviterId = inviterId
 
 	// Use transaction to ensure user creation and OAuth binding are atomic
 	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {

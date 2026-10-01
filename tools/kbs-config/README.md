@@ -1,7 +1,8 @@
 # Mang cấu hình KBS từ gateway này sang gateway khác
 
-Giá (+10%), công thức tính tiền theo token, cài đặt payOS và các kênh (kể cả
-tuyến workflow ComfyUI) nằm trong CƠ SỞ DỮ LIỆU của gateway, không nằm trong
+Giá (+10%), công thức tính tiền theo token, cài đặt payOS, tên hệ thống, điều khoản
+sử dụng / chính sách quyền riêng tư và các kênh (kể cả tuyến workflow ComfyUI) nằm
+trong CƠ SỞ DỮ LIỆU của gateway, không nằm trong
 code. Cài code mới lên máy khác thì các thứ đó KHÔNG tự đi theo - dùng 2 bước dưới.
 
 ## 1. Xuất (máy nguồn)

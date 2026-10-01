@@ -24,6 +24,8 @@ OPTION_KEYS = [
     "payment_setting.amount_options", "payment_setting.amount_discount",
     "PayOSClientId", "PayOSUnitPrice", "PayOSMinTopUp",
     "SelfUseModeEnabled", "SystemName", "Footer", "general_setting.docs_link", "theme.frontend",
+    # Điều khoản sử dụng và Chính sách quyền riêng tư (đã được chủ dịch vụ duyệt).
+    "legal.user_agreement", "legal.privacy_policy",
 ]
 
 # Trường của kênh mang sang; `key` không bao giờ xuất.

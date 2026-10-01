@@ -48,8 +48,8 @@ const MoreIcon = () => (
 export function Hero(props: HeroProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const docsUrl =
-    (status?.docs_link as string | undefined) || 'https://docs.newapi.pro'
+  // Chưa đặt liên kết tài liệu riêng thì dùng trang Tài liệu dựng sẵn (/docs).
+  const docsUrl = (status?.docs_link as string | undefined) || '/docs'
 
   const renderDocsButton = () => {
     const isExternal = docsUrl.startsWith('http')

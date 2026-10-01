@@ -142,7 +142,7 @@ func UpdateOption(c *gin.Context) {
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
 	switch option.Key {
-	case "QuotaForInviter", "QuotaForInvitee":
+	case "QuotaForInviter", "QuotaForInvitee", "ReferralCommissionPercent":
 		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
 			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
 			return
@@ -154,6 +154,12 @@ func UpdateOption(c *gin.Context) {
 		}
 	}
 	switch option.Key {
+	case "ReferralCommissionPercent":
+		percent, err := strconv.ParseFloat(strings.TrimSpace(option.Value.(string)), 64)
+		if err != nil || percent < 0 || percent > 100 {
+			common.ApiErrorMsg(c, "Tỷ lệ hoa hồng giới thiệu phải nằm trong khoảng 0 đến 100")
+			return
+		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && common.GitHubClientId == "" {
 			c.JSON(http.StatusOK, gin.H{

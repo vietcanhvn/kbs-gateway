@@ -124,6 +124,10 @@ var TelegramBotName = ""
 var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0
+
+// ReferralCommissionPercent: phần trăm hạn mức người mời nhận được mỗi lần người
+// họ đã mời nạp tiền thật thành công. 0 = tắt.
+var ReferralCommissionPercent = 0.0
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false

@@ -124,6 +124,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 	}
 
 	var quotaToAdd int
+	var commission *ReferralCommission
 	topUp := &TopUp{}
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
@@ -161,6 +162,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		if result.RowsAffected != 1 {
 			return gorm.ErrRecordNotFound
 		}
+		commission = grantReferralCommissionTx(tx, topUp, quotaToAdd)
 		return nil
 	})
 	if err != nil {
@@ -173,6 +175,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		return true, nil
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "epay topup")
+	recordReferralCommissionLog(commission)
 
 	common.SysLog(fmt.Sprintf("易支付充值成功 trade_no=%s user_id=%d quota_to_add=%d money=%.2f", topUp.TradeNo, topUp.UserId, quotaToAdd, topUp.Money))
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentProviderEpay)
@@ -185,6 +188,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 	}
 
 	var quota int
+	var commission *ReferralCommission
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -219,8 +223,12 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 		if err != nil || quota <= 0 {
 			return errors.New("无效的充值额度")
 		}
-		return tx.Model(&User{}).Where("id = ?", topUp.UserId).
-			Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).
+			Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error; err != nil {
+			return err
+		}
+		commission = grantReferralCommissionTx(tx, topUp, quota)
+		return nil
 	})
 
 	if err != nil {
@@ -228,6 +236,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 		return errors.New("充值失败，请稍后重试")
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quota, "stripe topup")
+	recordReferralCommissionLog(commission)
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(quota), topUp.Amount), callerIp, topUp.PaymentMethod, PaymentMethodStripe)
 
@@ -406,6 +415,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	var quotaToAdd int
 	var payMoney float64
 	var paymentMethod string
+	var commission *ReferralCommission
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
@@ -452,6 +462,8 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return err
 		}
 
+		commission = grantReferralCommissionTx(tx, topUp, quotaToAdd)
+
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		paymentMethod = topUp.PaymentMethod
@@ -464,6 +476,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 
 	// 事务外记录日志，避免阻塞
 	syncCreditUserQuotaCache(userId, quotaToAdd, "manual topup")
+	recordReferralCommissionLog(commission)
 	RecordTopupLog(userId, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney), callerIp, paymentMethod, "admin")
 	return nil
 }
@@ -473,6 +486,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	}
 
 	var quota int
+	var commission *ReferralCommission
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -527,7 +541,11 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			}
 		}
 
-		return tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(updateFields).Error
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(updateFields).Error; err != nil {
+			return err
+		}
+		commission = grantReferralCommissionTx(tx, topUp, quota)
+		return nil
 	})
 
 	if err != nil {
@@ -535,6 +553,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 		return errors.New("充值失败，请稍后重试")
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quota, "creem topup")
+	recordReferralCommissionLog(commission)
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用Creem充值成功，充值额度: %v，支付金额：%.2f", quota, topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodCreem)
 
@@ -547,6 +566,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 	}
 
 	var quotaToAdd int
+	var commission *ReferralCommission
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -585,7 +605,11 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 			return err
 		}
 
-		return tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+		commission = grantReferralCommissionTx(tx, topUp, quotaToAdd)
+		return nil
 	})
 
 	if err != nil {
@@ -593,6 +617,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 		return errors.New("充值失败，请稍后重试")
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "waffo topup")
+	recordReferralCommissionLog(commission)
 
 	if quotaToAdd > 0 {
 		RecordTopupLog(topUp.UserId, fmt.Sprintf("Waffo充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodWaffo)
@@ -607,6 +632,7 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 	}
 
 	var quotaToAdd int
+	var commission *ReferralCommission
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -645,7 +671,11 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 			return err
 		}
 
-		return tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+		commission = grantReferralCommissionTx(tx, topUp, quotaToAdd)
+		return nil
 	})
 
 	if err != nil {
@@ -653,6 +683,7 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 		return errors.New("充值失败，请稍后重试")
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "waffo pancake topup")
+	recordReferralCommissionLog(commission)
 
 	if quotaToAdd > 0 {
 		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("Waffo Pancake充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money))
@@ -678,6 +709,7 @@ func RechargePayOS(tradeNo string, paidVND int64, callerIp string) (alreadyDone 
 	}
 
 	var quotaToAdd int
+	var commission *ReferralCommission
 	topUp := &TopUp{}
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
@@ -715,6 +747,7 @@ func RechargePayOS(tradeNo string, paidVND int64, callerIp string) (alreadyDone 
 		if result.RowsAffected != 1 {
 			return gorm.ErrRecordNotFound
 		}
+		commission = grantReferralCommissionTx(tx, topUp, quotaToAdd)
 		return nil
 	})
 	if err != nil {
@@ -728,6 +761,7 @@ func RechargePayOS(tradeNo string, paidVND int64, callerIp string) (alreadyDone 
 		return true, nil
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "payos topup")
+	recordReferralCommissionLog(commission)
 
 	common.SysLog(fmt.Sprintf("payOS nạp tiền thành công trade_no=%s user_id=%d quota_to_add=%d money_vnd=%.0f paid_vnd=%d", topUp.TradeNo, topUp.UserId, quotaToAdd, topUp.Money, paidVND))
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("Nạp tiền qua payOS thành công, hạn mức: %v, số tiền: %.0f VND", logger.LogQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentProviderPayOS)

@@ -37,7 +37,7 @@ function vi(name: string): string {
 ## Vì sao dùng ${name}
 
 - **Một khóa cho mọi mô hình.** Đổi mô hình chỉ là đổi tên mô hình, không phải đổi cách kết nối.
-- **Trả theo lượng dùng.** Nạp trước, dùng tới đâu trừ tới đó. Không thuê bao. Giá từng mô hình công khai ở [Quảng trường mô hình](/pricing).
+- **Trả theo lượng dùng.** Nạp trước, dùng tới đâu trừ tới đó. Không thuê bao. Giá từng mô hình công khai ở mục [Mô hình](/pricing).
 - **Nạp tiền bằng VietQR.** Chuyển khoản từ ngân hàng Việt Nam, số dư cộng tự động.
 - **Tương thích chuẩn OpenAI và Gemini.** Dùng được ngay với các công cụ và thư viện sẵn có.
 - **Minh bạch.** Mỗi lần gọi đều được ghi lại: mô hình nào, lúc nào, hết bao nhiêu.

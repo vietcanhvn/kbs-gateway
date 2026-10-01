@@ -36,7 +36,9 @@ describe('built-in docs page', () => {
   test('tells users where to top up and where to create a key, with the real menu labels', () => {
     const guide = buildGuideMarkdown('vi', context)
     assert.ok(guide.includes('**Bảng điều khiển → Ví**'))
-    assert.ok(guide.includes('**Thêm Tiền**'))
+    assert.ok(guide.includes('**Nạp tiền**'))
+    assert.ok(guide.includes('**Mô hình** (menu trên cùng)'))
+    assert.ok(!guide.includes('Quảng trường'))
     assert.ok(guide.includes('**Bảng điều khiển → Khóa API**'))
     assert.ok(guide.includes('**Tạo Khóa API**'))
     assert.ok(guide.includes('*Lịch sử đơn hàng*'))

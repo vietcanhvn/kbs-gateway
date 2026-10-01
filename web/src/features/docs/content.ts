@@ -40,7 +40,7 @@ function vi({ name, origin }: GuideContext): string {
 ## Bắt đầu trong 4 bước
 
 1. **Tạo tài khoản** - bấm **Đăng ký** (hoặc **Đăng nhập**) ở góc trên bên phải.
-2. **Nạp tiền** - vào **Bảng điều khiển → Ví**, ở khung **Thêm Tiền** chọn số tiền, chọn **Chuyển khoản QR** (biểu tượng VietQR), rồi quét mã bằng ứng dụng ngân hàng. Số dư được cộng tự động sau khi chuyển khoản thành công.
+2. **Nạp tiền** - vào **Bảng điều khiển → Ví**, ở khung **Nạp tiền** chọn số tiền, chọn **Chuyển khoản QR** (biểu tượng VietQR), rồi quét mã bằng ứng dụng ngân hàng. Số dư được cộng tự động sau khi chuyển khoản thành công.
 3. **Tạo khóa API** - vào **Bảng điều khiển → Khóa API**, bấm **Tạo Khóa API**, đặt tên rồi sao chép khóa (bắt đầu bằng \`sk-\`).
 4. **Dùng khóa** - dán *địa chỉ API* và *khóa* vào ứng dụng của bạn (xem các phần bên dưới).
 
@@ -52,7 +52,7 @@ function vi({ name, origin }: GuideContext): string {
 | Nhập mã đổi thưởng (mã tặng) | **Ví** → ô *Có mã không?* → **Đổi** |
 | Xem lại các lần nạp | **Ví** → *Lịch sử đơn hàng* |
 | Tạo, tắt, xoá khóa API; đặt hạn ngạch cho từng khóa | **Khóa API** |
-| Xem danh sách mô hình và giá | **Quảng trường mô hình** (menu trên cùng) |
+| Xem danh sách mô hình và giá | **Mô hình** (menu trên cùng) |
 | Xem từng lần gọi đã tốn bao nhiêu | **Nhật ký sử dụng** |
 | Theo dõi tác vụ tạo ảnh, tạo video | **Nhật ký tác vụ** |
 | Thử mô hình ngay trên web, không cần viết code | **Sân chơi** |
@@ -65,7 +65,7 @@ Các mục **Ví**, **Khóa API**, **Nhật ký…** nằm ở cột bên trái,
 
 - Thanh toán bằng **chuyển khoản ngân hàng qua mã VietQR**. Tỷ giá và mức nạp tối thiểu hiện ngay trên trang **Ví**.
 - Hãy chuyển **đúng số tiền và đúng nội dung** ghi trên mã QR để hệ thống tự nhận.
-- Số dư tính bằng đô la Mỹ ($). Mỗi lần gọi mô hình trừ theo bảng giá ở **Quảng trường mô hình**.
+- Số dư tính bằng đô la Mỹ ($). Mỗi lần gọi mô hình trừ theo bảng giá ở mục **Mô hình**.
 - Hết số dư thì lệnh gọi bị từ chối cho tới khi bạn nạp thêm; tài khoản và khóa API vẫn giữ nguyên.
 
 ## Khóa API
@@ -77,7 +77,7 @@ Các mục **Ví**, **Khóa API**, **Nhật ký…** nằm ở cột bên trái,
 
 ## Dùng với KimStudio Box (KSB)
 
-Trong KSB mở **Cấu hình → API KBS** và điền:
+Trong KSB mở **Cấu hình → KBS API** và điền:
 
 - **Địa chỉ**: \`${origin}\`
 - **Khóa**: khóa \`sk-…\` bạn vừa tạo
@@ -86,7 +86,7 @@ rồi bấm **Lưu & Đóng**. Muốn đổi mô hình thì chọn ở các dòn
 
 ## Dành cho lập trình viên
 
-Địa chỉ gốc: \`${origin}\`. Mọi lệnh gọi cần tiêu đề \`Authorization: Bearer sk-…\`. Tên mô hình lấy ở **Quảng trường mô hình** hoặc \`GET /v1/models\`.
+Địa chỉ gốc: \`${origin}\`. Mọi lệnh gọi cần tiêu đề \`Authorization: Bearer sk-…\`. Tên mô hình lấy ở mục **Mô hình** hoặc \`GET /v1/models\`.
 
 | Việc | Địa chỉ |
 |---|---|
@@ -141,13 +141,13 @@ Gửi kèm ảnh tham chiếu: một ảnh đặt ở trường \`image\` (đị
 
 ## Câu hỏi thường gặp
 
-**Chuyển khoản rồi mà chưa thấy tiền?** Chờ 1-2 phút rồi tải lại trang **Ví**. Kiểm tra đã chuyển đúng số tiền và đúng nội dung trên mã QR. Vẫn chưa có thì liên hệ quản trị viên, kèm ảnh chụp giao dịch.
+**Chuyển khoản rồi mà chưa thấy tiền?** Chờ 1-2 phút rồi tải lại trang **Ví**. Kiểm tra đã chuyển đúng số tiền và đúng nội dung trên mã QR. Vẫn chưa có thì gửi ảnh chụp giao dịch tới contact@kimbox.studio.
 
 **Báo "số dư không đủ"?** Nạp thêm ở **Ví**. Mức đã tiêu xem ở **Nhật ký sử dụng**.
 
 **Báo khóa không hợp lệ (lỗi 401)?** Kiểm tra đã dán đủ khóa, khóa chưa bị vô hiệu hóa, chưa hết hạn và chưa dùng hết hạn ngạch.
 
-**Không thấy mô hình mình cần?** Chỉ gọi được các mô hình đang hiện ở **Quảng trường mô hình**.
+**Không thấy mô hình mình cần?** Chỉ gọi được các mô hình đang hiện ở mục **Mô hình**.
 `
 }
 
@@ -196,7 +196,7 @@ function en({ name, origin }: GuideContext): string {
 
 ## Using it with KimStudio Box (KSB)
 
-In KSB open **Settings → API KBS** and fill in:
+In KSB open **Settings → KBS API** and fill in:
 
 - **Address**: \`${origin}\`
 - **Key**: the \`sk-…\` key you created
@@ -260,7 +260,7 @@ Reference images: one image goes in the \`image\` field (a URL or a data URL); t
 
 ## FAQ
 
-**Transferred but no balance yet?** Wait 1-2 minutes and reload **Wallet**. Check that the amount and the note match the QR code. If it still has not arrived, contact the administrator with a screenshot of the transfer.
+**Transferred but no balance yet?** Wait 1-2 minutes and reload **Wallet**. Check that the amount and the note match the QR code. If it still has not arrived, send a screenshot of the transfer to contact@kimbox.studio.
 
 **"Insufficient balance"?** Top up in **Wallet**. What you spent is in **Usage Logs**.
 

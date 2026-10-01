@@ -1,6 +1,7 @@
 package comfyui
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -16,7 +17,34 @@ const (
 	miniMaxH3ImageLimit    = 9
 	miniMaxH3VideoLimit    = 3
 	miniMaxH3AudioLimit    = 3
+
+	// Qwen-Image-Edit (2509 / 2511): the positive "Edit Plus" encoder takes up
+	// to three images on image1..image3.
+	qwenEditPlusNode       = "TextEncodeQwenImageEditPlus"
+	qwenEditPlusImageLimit = 3
+	// Qwen Image 2.1 reference workflow: one "References Manager" node lists
+	// up to ten input files in its references_json widget and fans them out.
+	qwenReferencePackNode       = "QwenImageReferencePack"
+	qwenReferencePackImageLimit = 10
+	// Qwen Image 2.1 Image Edit (ComfyUI's own template): images go straight
+	// into the encoder on images.image_1..images.image_10.
+	qwen21EncodeNode       = "TextEncodeQwenImage21"
+	qwen21EncodeImageLimit = 10
 )
+
+// Which node a reference workflow feeds, and how.
+const (
+	referenceKindMiniMaxH3     = "minimax_h3"
+	referenceKindQwenEditPlus  = "qwen_edit_plus"
+	referenceKindQwenReference = "qwen_reference_pack"
+	referenceKindQwen21Encode  = "qwen21_encode"
+)
+
+// Image input name for slot n (1-based) on the Qwen encoders that take images directly.
+var qwenImageInputFormat = map[string]string{
+	referenceKindQwenEditPlus: "image%d",
+	referenceKindQwen21Encode: "images.image_%d",
+}
 
 var referenceInputPrefixes = []string{
 	"ref_images.ref_image_",
@@ -26,6 +54,7 @@ var referenceInputPrefixes = []string{
 }
 
 type referenceWorkflowSpec struct {
+	kind         string
 	targetNodeID string
 	imageLimit   int
 	videoLimit   int
@@ -62,6 +91,9 @@ func (a *TaskAdaptor) applyReferenceMediaToWorkflow(
 	spec, ok := referenceWorkflowSpecFor(workflow)
 	if !ok {
 		return false, nil
+	}
+	if spec.kind != referenceKindMiniMaxH3 {
+		return true, a.applyQwenReferenceImages(c, workflow, spec, req, metadata, info)
 	}
 
 	images := nonEmptyReferences(append(req.AdditionalReferenceImages(), metadata.ReferenceImages...))
@@ -121,10 +153,17 @@ func referenceWorkflowSpecFor(workflow map[string]any) (referenceWorkflowSpec, b
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	for _, id := range ids {
+	classOf := func(id string) string {
 		node, ok := workflow[id].(map[string]any)
-		if ok && strings.EqualFold(strings.TrimSpace(fmt.Sprint(node["class_type"])), miniMaxH3ReferenceNode) {
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(fmt.Sprint(node["class_type"]))
+	}
+	for _, id := range ids {
+		if strings.EqualFold(classOf(id), miniMaxH3ReferenceNode) {
 			return referenceWorkflowSpec{
+				kind:         referenceKindMiniMaxH3,
 				targetNodeID: id,
 				imageLimit:   miniMaxH3ImageLimit,
 				videoLimit:   miniMaxH3VideoLimit,
@@ -132,7 +171,109 @@ func referenceWorkflowSpecFor(workflow map[string]any) (referenceWorkflowSpec, b
 			}, true
 		}
 	}
+	for _, id := range ids {
+		if strings.EqualFold(classOf(id), qwenReferencePackNode) {
+			return referenceWorkflowSpec{
+				kind:         referenceKindQwenReference,
+				targetNodeID: id,
+				imageLimit:   qwenReferencePackImageLimit,
+			}, true
+		}
+	}
+	// Encoders that take images directly: only the one already wired to an
+	// image counts (the negative encoder, or a text-only workflow that happens
+	// to use the same node, has none).
+	for _, candidate := range []struct {
+		kind, class string
+		limit       int
+	}{
+		{referenceKindQwen21Encode, qwen21EncodeNode, qwen21EncodeImageLimit},
+		{referenceKindQwenEditPlus, qwenEditPlusNode, qwenEditPlusImageLimit},
+	} {
+		firstSlot := fmt.Sprintf(qwenImageInputFormat[candidate.kind], 1)
+		for _, id := range ids {
+			if !strings.EqualFold(classOf(id), candidate.class) {
+				continue
+			}
+			inputs, _ := workflow[id].(map[string]any)["inputs"].(map[string]any)
+			if workflowConnectionNodeID(inputs[firstSlot]) != "" {
+				return referenceWorkflowSpec{kind: candidate.kind, targetNodeID: id, imageLimit: candidate.limit}, true
+			}
+		}
+	}
 	return referenceWorkflowSpec{}, false
+}
+
+// qwenReferenceImages: every image of the request, top-level first. Qwen
+// workflows have no "first frame": the main image is simply image 1.
+func qwenReferenceImages(req common.TaskSubmitReq, metadata comfyMetadata) []string {
+	all := append([]string{req.Image}, req.AdditionalReferenceImages()...)
+	return nonEmptyReferences(append(all, metadata.ReferenceImages...))
+}
+
+// applyQwenReferenceImages uploads the request's images and wires them into a
+// Qwen edit / reference workflow, replacing the sample images it shipped with.
+func (a *TaskAdaptor) applyQwenReferenceImages(
+	c *gin.Context,
+	workflow map[string]any,
+	spec referenceWorkflowSpec,
+	req common.TaskSubmitReq,
+	metadata comfyMetadata,
+	info *common.RelayInfo,
+) error {
+	images := qwenReferenceImages(req, metadata)
+	if err := validateReferenceCounts(spec, images, nonEmptyReferences(metadata.ReferenceVideos), nonEmptyReferences(metadata.ReferenceAudios)); err != nil {
+		return err
+	}
+	if len(images) == 0 {
+		return &referenceValidationError{field: "image", message: "this workflow needs at least one input image"}
+	}
+	inputs, err := workflowNodeInputs(workflow, spec.targetNodeID)
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(images))
+	for index, source := range images {
+		name, err := a.uploadReferenceInput(c, info, source, "image")
+		if err != nil {
+			return fmt.Errorf("upload reference image %d: %w", index+1, err)
+		}
+		names = append(names, name)
+	}
+
+	switch spec.kind {
+	case referenceKindQwenReference:
+		refs := make([]map[string]string, 0, len(names))
+		for _, name := range names {
+			refs = append(refs, map[string]string{"kind": "image", "file": name})
+		}
+		encoded, err := json.Marshal(map[string]any{"references": refs})
+		if err != nil {
+			return err
+		}
+		inputs["references_json"] = string(encoded)
+	case referenceKindQwenEditPlus, referenceKindQwen21Encode:
+		format := qwenImageInputFormat[spec.kind]
+		oldRoots := make([]string, 0)
+		for slot := 1; slot <= spec.imageLimit; slot++ {
+			key := fmt.Sprintf(format, slot)
+			if nodeID := workflowConnectionNodeID(inputs[key]); nodeID != "" {
+				oldRoots = append(oldRoots, nodeID)
+			}
+			delete(inputs, key)
+		}
+		for _, nodeID := range oldRoots {
+			removeOrphanedReferenceChain(workflow, spec.targetNodeID, nodeID)
+		}
+		removeUnusedReferenceLoaders(workflow, spec.targetNodeID)
+		allocator := newWorkflowNodeIDAllocator(workflow)
+		for index, name := range names {
+			loadID := allocator.next()
+			workflow[loadID] = workflowNode("LoadImage", map[string]any{"image": name})
+			inputs[fmt.Sprintf(format, index+1)] = []any{loadID, 0}
+		}
+	}
+	return nil
 }
 
 func validateReferenceCounts(spec referenceWorkflowSpec, images, videos, audios []string) error {

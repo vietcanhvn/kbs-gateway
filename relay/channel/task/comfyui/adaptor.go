@@ -934,8 +934,10 @@ func (a *TaskAdaptor) applyRequestToWorkflow(c *gin.Context, workflow map[string
 			return err
 		}
 	}
-	_, referenceWorkflow := referenceWorkflowSpecFor(workflow)
-	if referenceWorkflow && strings.TrimSpace(req.Image) != "" {
+	referenceSpec, referenceWorkflow := referenceWorkflowSpecFor(workflow)
+	// H3's reference node has no first-frame slot; Qwen workflows take the
+	// top-level image as image 1 (applyQwenReferenceImages).
+	if referenceWorkflow && referenceSpec.kind == referenceKindMiniMaxH3 && strings.TrimSpace(req.Image) != "" {
 		return fmt.Errorf("comfyui reference workflow cannot consume top-level image as a first frame")
 	}
 	workflowMode, _ := inferMiniMaxH3WorkflowMode(workflow)

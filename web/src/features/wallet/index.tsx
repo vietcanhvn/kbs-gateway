@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -24,15 +25,21 @@ import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { getSelf } from '@/lib/api'
 
+import { getReferralStats, markReferralCommissionsSeen } from './api'
 import { AffiliateRewardsCard } from './components/affiliate-rewards-card'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
+import { CommissionHistoryDialog } from './components/dialogs/commission-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { TransferDialog } from './components/dialogs/transfer-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletStatsCard } from './components/wallet-stats-card'
-import { DEFAULT_DISCOUNT_RATE, PAYMENT_TYPES } from './constants'
+import {
+  DEFAULT_DISCOUNT_RATE,
+  PAYMENT_TYPES,
+  REFERRAL_STATS_QUERY_KEY,
+} from './constants'
 import {
   useTopupInfo,
   usePayment,
@@ -75,6 +82,13 @@ export function Wallet(props: WalletProps) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [billingDialogOpen, setBillingDialogOpen] = useState(false)
+  const [commissionDialogOpen, setCommissionDialogOpen] = useState(false)
+  const queryClient = useQueryClient()
+  const referralStatsQuery = useQuery({
+    queryKey: REFERRAL_STATS_QUERY_KEY,
+    queryFn: getReferralStats,
+  })
+  const referralStats = referralStatsQuery.data?.data ?? null
   const [redemptionCode, setRedemptionCode] = useState('')
   const [creemDialogOpen, setCreemDialogOpen] = useState(false)
   const [selectedCreemProduct, setSelectedCreemProduct] =
@@ -116,8 +130,7 @@ export function Wallet(props: WalletProps) {
   const { processing: waffoProcessing, processWaffoPayment } = useWaffoPayment()
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
-  const { processing: payosProcessing, processPayOSPayment } =
-    usePayOSPayment()
+  const { processing: payosProcessing, processPayOSPayment } = usePayOSPayment()
 
   // Fetch and refresh user data
   const fetchUser = useCallback(async () => {
@@ -234,6 +247,15 @@ export function Wallet(props: WalletProps) {
   }
 
   // Handle transfer
+  // Opening the history is what "seeing" the new commissions means: the
+  // congratulation goes away for good, on every device.
+  const handleOpenCommissions = async () => {
+    setCommissionDialogOpen(true)
+    if ((referralStats?.summary.unseen_count ?? 0) === 0) return
+    await markReferralCommissionsSeen()
+    await queryClient.invalidateQueries({ queryKey: REFERRAL_STATS_QUERY_KEY })
+  }
+
   const handleTransfer = async (amount: number) => {
     const success = await transferQuota(amount)
     if (success) {
@@ -364,6 +386,8 @@ export function Wallet(props: WalletProps) {
                 topupInfo?.payment_compliance_confirmed !== false
               }
               loading={affiliateLoading}
+              commissionStats={referralStats}
+              onOpenCommissions={handleOpenCommissions}
             />
           </div>
         </SectionPageLayout.Content>
@@ -395,6 +419,13 @@ export function Wallet(props: WalletProps) {
       <BillingHistoryDialog
         open={billingDialogOpen}
         onOpenChange={setBillingDialogOpen}
+      />
+
+      <CommissionHistoryDialog
+        open={commissionDialogOpen}
+        onOpenChange={setCommissionDialogOpen}
+        stats={referralStats}
+        inviteCount={user?.aff_count ?? 0}
       />
 
       <CreemConfirmDialog

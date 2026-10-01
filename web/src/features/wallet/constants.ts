@@ -65,3 +65,10 @@ export const DEFAULT_DISCOUNT_RATE = 1.0
  * Default minimum topup amount
  */
 export const DEFAULT_MIN_TOPUP = 1
+
+// ============================================================================
+// Referral commission
+// ============================================================================
+
+/** Shared by the wallet page and the app-wide congratulation notice. */
+export const REFERRAL_STATS_QUERY_KEY = ['referral-stats'] as const

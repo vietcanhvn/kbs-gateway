@@ -304,3 +304,67 @@ export interface BillingHistoryResponse {
 export interface CompleteOrderRequest {
   trade_no: string
 }
+
+// ============================================================================
+// Referral commission (percentage of an invited user's top-up)
+// ============================================================================
+
+export interface ReferralCommissionSummary {
+  total_quota: number
+  total_count: number
+  total_top_up_quota: number
+  paying_invitees: number
+  inviter_count: number
+  unseen_quota: number
+  unseen_count: number
+}
+
+export interface ReferralCommissionPoint {
+  created_time: number
+  quota: number
+}
+
+export interface ReferralStats {
+  /** Commission rate in percent; 0 means the programme is off. */
+  percent: number
+  summary: ReferralCommissionSummary
+  recent: ReferralCommissionPoint[] | null
+}
+
+export interface TopReferrer {
+  inviter_id: number
+  username: string
+  total_quota: number
+  total_count: number
+  invitee_count: number
+}
+
+export interface AdminReferralStats extends ReferralStats {
+  referred_users: number
+  top: TopReferrer[] | null
+}
+
+export interface ReferralCommissionItem {
+  id: number
+  created_time: number
+  /** Admin view only. */
+  inviter_id?: number
+  inviter_name?: string
+  invitee_id?: number
+  /** Masked ("ng***") in the inviter's own view. */
+  invitee_name: string
+  trade_no?: string
+  top_up_quota: number
+  percent: number
+  quota: number
+}
+
+export interface ReferralCommissionPage {
+  items: ReferralCommissionItem[] | null
+  total: number
+  page: number
+  page_size: number
+}
+
+/** Whose commissions a list shows: the signed-in inviter's, or everyone's (admin). */
+export type ReferralCommissionScope = 'self' | 'all'

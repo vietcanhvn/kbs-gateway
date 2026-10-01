@@ -337,6 +337,7 @@ export type BillingSettings = {
   PayOSChecksumKey: string
   PayOSUnitPrice: number
   PayOSMinTopUp: number
+  ReferralCommissionPercent: number
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number

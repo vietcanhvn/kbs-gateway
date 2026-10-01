@@ -21,6 +21,7 @@ import { parseCurrencyDisplayType } from '@/lib/currency'
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
+import { ReferralCommissionSection } from '../general/referral-commission-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
 import { PayOSSettingsSection } from '../integrations/payos-settings-section'
 import { RatioSettingsCard } from '../models/ratio-settings-card'
@@ -203,6 +204,21 @@ const BILLING_SECTIONS = [
         callbackAddress={
           settings.CustomCallbackAddress || settings.ServerAddress
         }
+        complianceConfirmed={
+          (settings['payment_setting.compliance_confirmed'] ?? false) &&
+          settings['payment_setting.compliance_terms_version'] === 'v1'
+        }
+      />
+    ),
+  },
+  {
+    id: 'referral',
+    titleKey: 'Referral commission',
+    build: (settings: BillingSettings) => (
+      <ReferralCommissionSection
+        defaultValues={{
+          ReferralCommissionPercent: settings.ReferralCommissionPercent ?? 0,
+        }}
         complianceConfirmed={
           (settings['payment_setting.compliance_confirmed'] ?? false) &&
           settings['payment_setting.compliance_terms_version'] === 'v1'

@@ -51,6 +51,7 @@ function vi({ name, origin }: GuideContext): string {
 | Nạp tiền, xem số dư | **Ví** |
 | Nhập mã đổi thưởng (mã tặng) | **Ví** → ô *Có mã không?* → **Đổi** |
 | Xem lại các lần nạp | **Ví** → *Lịch sử đơn hàng* |
+| Lấy liên kết giới thiệu, xem hoa hồng | **Ví** → *Chương trình Giới thiệu* |
 | Tạo, tắt, xoá khóa API; đặt hạn ngạch cho từng khóa | **Khóa API** |
 | Xem danh sách mô hình và giá | **Mô hình** (menu trên cùng) |
 | Xem từng lần gọi đã tốn bao nhiêu | **Nhật ký sử dụng** |
@@ -67,6 +68,12 @@ Các mục **Ví**, **Khóa API**, **Nhật ký…** nằm ở cột bên trái,
 - Hãy chuyển **đúng số tiền và đúng nội dung** ghi trên mã QR để hệ thống tự nhận.
 - Số dư tính bằng đô la Mỹ ($). Mỗi lần gọi mô hình trừ theo bảng giá ở mục **Mô hình**.
 - Hết số dư thì lệnh gọi bị từ chối cho tới khi bạn nạp thêm; tài khoản và khóa API vẫn giữ nguyên.
+
+## Giới thiệu bạn bè
+
+- Liên kết giới thiệu của bạn nằm ở cuối trang **Ví**, mục *Chương trình Giới thiệu*. Gửi liên kết đó cho người khác đăng ký.
+- Mỗi lần người bạn đã mời **nạp tiền**, bạn được cộng hoa hồng theo tỷ lệ ghi ngay trong mục đó (nếu chương trình đang bật).
+- Hoa hồng vào ô *Đang chờ*. Bấm **Chuyển vào số dư** để dùng như tiền đã nạp. Bấm **Lịch sử hoa hồng** để xem từng khoản.
 
 ## Khóa API
 
@@ -170,6 +177,7 @@ function en({ name, origin }: GuideContext): string {
 | Top up, check your balance | **Wallet** |
 | Enter a redemption code | **Wallet** → *Have a Code?* → **Redeem** |
 | Review past top-ups | **Wallet** → *Order History* |
+| Get your referral link, see your commission | **Wallet** → *Referral Program* |
 | Create, disable or delete API keys; set a limit per key | **API Keys** |
 | Browse models and prices | **Model Square** (top menu) |
 | See what each call cost | **Usage Logs** |
@@ -186,6 +194,12 @@ function en({ name, origin }: GuideContext): string {
 - Transfer **the exact amount with the exact note** printed on the QR code so it is matched automatically.
 - The balance is in US dollars ($). Each call is charged at the price listed in **Model Square**.
 - When the balance runs out, calls are refused until you top up; your account and keys are kept.
+
+## Referring friends
+
+- Your referral link is at the bottom of the **Wallet** page, under *Referral Program*. Share it so others sign up through it.
+- Each time someone you invited **tops up**, you earn a commission at the rate shown in that section (when the programme is on).
+- Commission lands in *Pending*. Press **Transfer to Balance** to spend it like topped-up money, and **Commission history** to see every payment.
 
 ## API keys
 

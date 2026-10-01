@@ -41,6 +41,10 @@ import type {
   WaffoPancakePaymentResponse,
   PayOSPaymentRequest,
   PayOSPaymentResponse,
+  ReferralStats,
+  AdminReferralStats,
+  ReferralCommissionPage,
+  ReferralCommissionScope,
 } from './types'
 
 // ============================================================================
@@ -270,5 +274,55 @@ export async function completeOrder(
   request: CompleteOrderRequest
 ): Promise<ApiResponse> {
   const res = await api.post('/api/user/topup/complete', request)
+  return res.data
+}
+
+// ----------------------------------------------------------------------------
+// Referral commission
+// ----------------------------------------------------------------------------
+
+/**
+ * Commission totals and chart points of the signed-in inviter
+ */
+export async function getReferralStats(): Promise<ApiResponse<ReferralStats>> {
+  // Loaded on every page for the congratulation notice: fail silently.
+  const res = await api.get('/api/user/aff/stats', {
+    skipBusinessError: true,
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * System-wide commission totals, top referrers and chart points (admin only)
+ */
+export async function getAdminReferralStats(): Promise<
+  ApiResponse<AdminReferralStats>
+> {
+  const res = await api.get('/api/user/referral/stats')
+  return res.data
+}
+
+/**
+ * One page of commissions: the inviter's own, or everyone's (admin only)
+ */
+export async function getReferralCommissions(
+  scope: ReferralCommissionScope,
+  page: number,
+  pageSize: number
+): Promise<ApiResponse<ReferralCommissionPage>> {
+  const url =
+    scope === 'all'
+      ? '/api/user/referral/commissions'
+      : '/api/user/aff/commissions'
+  const res = await api.get(url, { params: { p: page, page_size: pageSize } })
+  return res.data
+}
+
+/**
+ * Mark the inviter's new commissions as seen (the congratulation was shown)
+ */
+export async function markReferralCommissionsSeen(): Promise<ApiResponse> {
+  const res = await api.post('/api/user/aff/commissions/seen')
   return res.data
 }

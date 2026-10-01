@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Share2 } from 'lucide-react'
+import { PartyPopper, Share2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
@@ -27,7 +27,8 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatQuota } from '@/lib/format'
 
-import type { UserWalletData } from '../types'
+import { formatCommissionRate } from '../lib/commission'
+import type { ReferralStats, UserWalletData } from '../types'
 
 interface AffiliateRewardsCardProps {
   user: UserWalletData | null
@@ -35,6 +36,9 @@ interface AffiliateRewardsCardProps {
   onTransfer: () => void
   complianceConfirmed?: boolean
   loading?: boolean
+  /** Commission on invited users' top-ups; null while loading or unavailable. */
+  commissionStats?: ReferralStats | null
+  onOpenCommissions?: () => void
 }
 
 export function AffiliateRewardsCard({
@@ -43,6 +47,8 @@ export function AffiliateRewardsCard({
   onTransfer,
   complianceConfirmed = true,
   loading,
+  commissionStats,
+  onOpenCommissions,
 }: AffiliateRewardsCardProps) {
   const { t } = useTranslation()
   if (loading) {
@@ -61,6 +67,10 @@ export function AffiliateRewardsCard({
   }
 
   const hasRewards = (user?.aff_quota ?? 0) > 0
+  const commissionPercent = commissionStats?.percent ?? 0
+  const unseenCount = commissionStats?.summary.unseen_count ?? 0
+  const showCommission =
+    commissionPercent > 0 || (commissionStats?.summary.total_count ?? 0) > 0
 
   return (
     <Card data-card-hover='false' className='bg-muted/20 py-0'>
@@ -73,10 +83,15 @@ export function AffiliateRewardsCard({
             <h3 className='truncate text-sm font-semibold'>
               {t('Referral Program')}
             </h3>
-            <p className='text-muted-foreground line-clamp-1 text-xs'>
-              {t(
-                'Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.'
-              )}
+            <p className='text-muted-foreground line-clamp-2 text-xs'>
+              {commissionPercent > 0
+                ? t(
+                    'You earn {{rate}} of every top-up made by people you invited.',
+                    { rate: formatCommissionRate(commissionPercent) }
+                  )
+                : t(
+                    'Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.'
+                  )}
             </p>
           </div>
         </div>
@@ -123,6 +138,43 @@ export function AffiliateRewardsCard({
             </Button>
           )}
         </div>
+        {unseenCount > 0 && (
+          <div className='bg-chart-3/10 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 lg:col-span-3'>
+            <PartyPopper className='text-chart-3 size-4 shrink-0' />
+            <p className='min-w-0 flex-1 text-sm font-medium'>
+              {t(
+                'Congratulations! You earned {{amount}} in referral commission from {{count}} new top-up(s).',
+                {
+                  amount: formatQuota(
+                    commissionStats?.summary.unseen_quota ?? 0
+                  ),
+                  count: unseenCount,
+                }
+              )}
+            </p>
+            <Button
+              type='button'
+              size='sm'
+              className='h-8 shrink-0'
+              onClick={onOpenCommissions}
+            >
+              {t('View')}
+            </Button>
+          </div>
+        )}
+        {showCommission && unseenCount === 0 && (
+          <div className='flex justify-end lg:col-span-3'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='h-8'
+              onClick={onOpenCommissions}
+            >
+              {t('Commission history')}
+            </Button>
+          </div>
+        )}
         {!complianceConfirmed ? (
           <p className='text-muted-foreground text-xs lg:col-span-3'>
             {t(

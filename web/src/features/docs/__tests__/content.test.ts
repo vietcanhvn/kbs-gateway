@@ -61,6 +61,19 @@ describe('built-in docs page', () => {
     assert.ok(en.includes('**Commission history**'))
   })
 
+  test('explains why a model can be greyed out with an exclamation mark', () => {
+    assert.ok(
+      buildGuideMarkdown('vi', context).includes(
+        '**Mô hình bị mờ, có dấu chấm than trong ứng dụng?**'
+      )
+    )
+    assert.ok(
+      buildGuideMarkdown('en', context).includes(
+        'greyed out with an exclamation mark'
+      )
+    )
+  })
+
   test('API examples use the address the page is served from', () => {
     for (const language of ['vi', 'en']) {
       const guide = buildGuideMarkdown(language, context)

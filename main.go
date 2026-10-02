@@ -128,6 +128,9 @@ func main() {
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
 
+	// Tự kiểm tra máy chủ ComfyUI: máy chủ tắt thì tự tắt kênh, sống lại thì tự bật.
+	service.StartComfyUIHealthCheckTask()
+
 	// Report this process as a system instance so the System Info page can show
 	// all currently alive nodes in multi-instance deployments.
 	service.StartSystemInstanceReporter()

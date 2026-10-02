@@ -155,6 +155,8 @@ Gửi kèm ảnh tham chiếu: một ảnh đặt ở trường \`image\` (đị
 **Báo khóa không hợp lệ (lỗi 401)?** Kiểm tra đã dán đủ khóa, khóa chưa bị vô hiệu hóa, chưa hết hạn và chưa dùng hết hạn ngạch.
 
 **Không thấy mô hình mình cần?** Chỉ gọi được các mô hình đang hiện ở mục **Mô hình**.
+
+**Mô hình bị mờ, có dấu chấm than trong ứng dụng?** API của mô hình đó đang bảo trì, hoặc máy chủ của mô hình chỉ chạy vào những khung giờ nhất định (một số mô hình ảnh và video chạy trên máy chủ riêng của chúng tôi). Khi máy chủ hoạt động lại, mô hình tự dùng được, bạn không cần làm gì. Trong lúc chờ, hãy chọn mô hình khác.
 `
 }
 
@@ -281,6 +283,8 @@ Reference images: one image goes in the \`image\` field (a URL or a data URL); t
 **Invalid key (error 401)?** Check that the whole key was pasted and that it is not disabled, expired or over its limit.
 
 **A model is missing?** Only the models shown in **Model Square** can be called.
+
+**A model is greyed out with an exclamation mark in the app?** Its API is under maintenance, or its server only runs at certain hours (some image and video models run on our own servers). When the server is back the model works again on its own. Meanwhile, pick another model.
 `
 }
 

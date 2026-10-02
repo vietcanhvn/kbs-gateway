@@ -299,6 +299,9 @@ export function PublicHeader(props: PublicHeaderProps) {
 
             {/* Mobile: compact actions + hamburger */}
             <div className='flex items-center gap-2 sm:hidden'>
+              {/* Điện thoại cũng phải đổi được ngôn ngữ: trước đây nút này chỉ
+                  có ở thanh ngang của màn hình rộng. */}
+              {showLanguageSwitcher && <LanguageSwitcher />}
               {showThemeSwitch && <ThemeSwitch />}
               {showAuthButtons && !loading && isAuthenticated && (
                 <ProfileDropdown />

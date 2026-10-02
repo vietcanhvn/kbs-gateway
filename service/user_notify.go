@@ -111,7 +111,11 @@ func sendEmailNotify(userEmail string, data dto.Notify) error {
 	for _, value := range data.Values {
 		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
 	}
-	return common.SendEmail(data.Title, userEmail, content)
+	// Mọi thông báo qua email đều đi trong khung thư chung của hệ thống (tên hệ
+	// thống ở tiêu đề, chân thư có đơn vị vận hành và email hỗ trợ).
+	message := NoticeEmail(data.Title, content)
+	message.To = userEmail
+	return common.SendEmailMessage(message)
 }
 
 func sendBarkNotify(barkURL string, data dto.Notify) error {

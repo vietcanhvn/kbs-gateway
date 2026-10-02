@@ -27,8 +27,8 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 
 	success := model.UpdateChannelStatus(channelError.ChannelId, channelError.UsingKey, common.ChannelStatusAutoDisabled, reason)
 	if success {
-		subject := fmt.Sprintf("通道「%s」（#%d）已被禁用", channelError.ChannelName, channelError.ChannelId)
-		content := fmt.Sprintf("通道「%s」（#%d）已被禁用，原因：%s", channelError.ChannelName, channelError.ChannelId, reason)
+		subject := fmt.Sprintf("Kênh «%s» (#%d) đã bị tắt tự động", channelError.ChannelName, channelError.ChannelId)
+		content := fmt.Sprintf("Kênh «%s» (#%d) đã bị tắt tự động. Lý do: %s", channelError.ChannelName, channelError.ChannelId, reason)
 		NotifyRootUser(formatNotifyType(channelError.ChannelId, common.ChannelStatusAutoDisabled), subject, content)
 	}
 }
@@ -36,8 +36,8 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 func EnableChannel(channelId int, usingKey string, channelName string) {
 	success := model.UpdateChannelStatus(channelId, usingKey, common.ChannelStatusEnabled, "")
 	if success {
-		subject := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
-		content := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
+		subject := fmt.Sprintf("Kênh «%s» (#%d) đã được bật lại", channelName, channelId)
+		content := fmt.Sprintf("Kênh «%s» (#%d) đã được bật lại.", channelName, channelId)
 		NotifyRootUser(formatNotifyType(channelId, common.ChannelStatusEnabled), subject, content)
 	}
 }

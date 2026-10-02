@@ -2,7 +2,6 @@ package common
 
 import (
 	"crypto/tls"
-	"encoding/base64"
 	"fmt"
 	"net/smtp"
 	"slices"
@@ -75,7 +74,14 @@ func newSMTPClient(addr string) (*smtp.Client, error) {
 	return client, nil
 }
 
+// SendEmail gửi một thư HTML; bản chữ thuần đi kèm được suy ra từ HTML.
 func SendEmail(subject string, receiver string, content string) error {
+	return SendEmailMessage(EmailMessage{Subject: subject, To: receiver, HTML: content})
+}
+
+// SendEmailMessage gửi thư hệ thống dạng multipart/alternative (xem buildEmailMIME).
+func SendEmailMessage(message EmailMessage) error {
+	receiver := message.To
 	if SMTPFrom == "" { // for compatibility
 		SMTPFrom = SMTPAccount
 	}
@@ -86,14 +92,10 @@ func SendEmail(subject string, receiver string, content string) error {
 	if SMTPServer == "" && SMTPAccount == "" {
 		return fmt.Errorf("SMTP 服务器未配置")
 	}
-	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
-	mail := []byte(fmt.Sprintf("To: %s\r\n"+
-		"From: %s <%s>\r\n"+
-		"Subject: %s\r\n"+
-		"Date: %s\r\n"+
-		"Message-ID: %s\r\n"+ // 添加 Message-ID 头
-		"Content-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n",
-		receiver, SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, content))
+	mail, err2 := buildEmailMIME(message, SystemName, SMTPFrom, id, time.Now())
+	if err2 != nil {
+		return err2
+	}
 	auth := getSMTPAuth()
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
 	to := strings.Split(receiver, ";")

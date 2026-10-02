@@ -103,6 +103,11 @@ var SMTPInsecureSkipVerify = false
 var SMTPForceAuthLogin = false
 var SMTPAccount = ""
 var SMTPFrom = ""
+
+// Chân thư của email hệ thống: tên đơn vị vận hành và trang web chính. Email hỗ
+// trợ lấy theo SMTPFrom. Đổi được qua bảng cài đặt (EmailBrandCompany / EmailBrandWebsite).
+var EmailBrandCompany = "Kim Box Studio (KMG)"
+var EmailBrandWebsite = "https://kimbox.studio"
 var SMTPToken = ""
 
 var GitHubClientId = ""

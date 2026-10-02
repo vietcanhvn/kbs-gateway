@@ -1020,7 +1020,7 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	allowDisable := mode != operation_setting.ChannelTestModePassiveRecovery
 	summary := performChannelTests(ctx, selected, testUserID, allowDisable, report)
 	if notify && (ctx == nil || ctx.Err() == nil) {
-		service.NotifyRootUser(dto.NotifyTypeChannelTest, "通道测试完成", "所有通道测试已完成")
+		service.NotifyRootUser(dto.NotifyTypeChannelTest, "Đã kiểm tra xong các kênh", "Lượt kiểm tra tất cả các kênh đã hoàn tất.")
 	}
 	return summary, nil
 }

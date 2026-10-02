@@ -59,6 +59,8 @@ func InitOptionMap() {
 	common.OptionMap["EmailDomainWhitelist"] = strings.Join(common.EmailDomainWhitelist, ",")
 	common.OptionMap["SMTPServer"] = ""
 	common.OptionMap["SMTPFrom"] = ""
+	common.OptionMap["EmailBrandCompany"] = common.EmailBrandCompany
+	common.OptionMap["EmailBrandWebsite"] = common.EmailBrandWebsite
 	common.OptionMap["SMTPPort"] = strconv.Itoa(common.SMTPPort)
 	common.OptionMap["SMTPAccount"] = ""
 	common.OptionMap["SMTPToken"] = ""
@@ -410,6 +412,10 @@ func updateOptionMap(key string, value string) (err error) {
 		common.SMTPAccount = value
 	case "SMTPFrom":
 		common.SMTPFrom = value
+	case "EmailBrandCompany":
+		common.EmailBrandCompany = value
+	case "EmailBrandWebsite":
+		common.EmailBrandWebsite = value
 	case "SMTPToken":
 		common.SMTPToken = value
 	case "ServerAddress":

@@ -77,7 +77,17 @@ export function LegalConsent({
           onCheckedChange={handleChange}
           aria-invalid={highlight}
           aria-describedby={highlight ? 'legal-consent-error' : undefined}
-          className='mt-0.5 size-5'
+          /*
+           * This one checkbox carries a legal decision, so it is drawn louder
+           * than the shared default:
+           *  - border-2 + border-foreground, because --input is oklch(0.93) on
+           *    white and white/17% on dark, which both read as "barely there".
+           *  - rounded-[4px], because the theme's --radius is 1rem, so the
+           *    default rounded-sm lands near 10px and a 20px box turns into a
+           *    circle that nobody recognises as a checkbox.
+           *  - size-5 keeps it at 20px, a comfortable tap target.
+           */
+          className='border-foreground mt-0.5 size-5 rounded-[4px] border-2'
         />
         <Label
           htmlFor='legal-consent'

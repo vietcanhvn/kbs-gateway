@@ -40,6 +40,14 @@ type OAuthProvidersProps = {
   onWeChatLogin?: () => void
   isWeChatLoading?: boolean
   redirectTo?: string
+  /**
+   * The visitor has not accepted the legal terms yet. Buttons stay clickable
+   * on purpose: clicking calls `onBlockedClick` so the consent box can point
+   * out what is missing, instead of leaving a greyed-out button with no
+   * explanation.
+   */
+  blocked?: boolean
+  onBlockedClick?: () => void
 }
 
 type ProviderButton = {
@@ -57,6 +65,8 @@ export function OAuthProviders({
   onWeChatLogin,
   isWeChatLoading = false,
   redirectTo,
+  blocked = false,
+  onBlockedClick,
 }: OAuthProvidersProps) {
   const { t } = useTranslation()
   const {
@@ -171,7 +181,8 @@ export function OAuthProviders({
                 variant='outline'
                 type='button'
                 disabled={disabled || isLoading || extraDisabled}
-                onClick={onClick}
+                aria-describedby={blocked ? 'legal-consent-error' : undefined}
+                onClick={blocked && onBlockedClick ? onBlockedClick : onClick}
                 className='h-11 w-full justify-center gap-2 rounded-lg'
               >
                 {icon}

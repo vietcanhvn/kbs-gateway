@@ -66,7 +66,7 @@ export function SignUpForm({
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
-  const legalConsentErrorMessage = t('Please agree to the legal terms first')
+  const [legalConsentHighlight, setLegalConsentHighlight] = useState(false)
 
   const { status } = useStatus()
   const {
@@ -102,6 +102,7 @@ export function SignUpForm({
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
   const requiresLegalConsent = hasUserAgreement || hasPrivacyPolicy
+  const legalConsentMissing = requiresLegalConsent && !agreedToLegal
   const oauthRegisterEnabled =
     status?.oauth_register_enabled ??
     status?.data?.oauth_register_enabled ??
@@ -131,6 +132,30 @@ export function SignUpForm({
     }
   }, [requiresLegalConsent])
 
+  // Visitor ticked the box: drop the attention state straight away.
+  useEffect(() => {
+    if (agreedToLegal) {
+      setLegalConsentHighlight(false)
+    }
+  }, [agreedToLegal])
+
+  /**
+   * Call before any sign-up path. Returns false when the legal box still needs
+   * ticking, and in that case lights the box up, scrolls it into view and
+   * replays the shake so a second click is not silently ignored.
+   */
+  const ensureLegalConsent = () => {
+    if (!legalConsentMissing) return true
+    setLegalConsentHighlight(false)
+    window.requestAnimationFrame(() => {
+      setLegalConsentHighlight(true)
+      document
+        .querySelector('#legal-consent-box')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    return false
+  }
+
   useEffect(() => {
     const aff = new URLSearchParams(window.location.search).get('aff')?.trim()
     if (aff) {
@@ -139,10 +164,7 @@ export function SignUpForm({
   }, [])
 
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
-    if (requiresLegalConsent && !agreedToLegal) {
-      toast.error(legalConsentErrorMessage)
-      return
-    }
+    if (!ensureLegalConsent()) return
 
     // Validate email verification if required
     if (emailVerificationRequired) {
@@ -190,10 +212,7 @@ export function SignUpForm({
   }
 
   const handleOpenWeChatDialog = () => {
-    if (requiresLegalConsent && !agreedToLegal) {
-      toast.error(legalConsentErrorMessage)
-      return
-    }
+    if (!ensureLegalConsent()) return
 
     setIsWeChatDialogOpen(true)
   }
@@ -243,7 +262,16 @@ export function SignUpForm({
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(event) => {
+          // Check the legal box before the field validation runs. Otherwise an
+          // empty form would only show field errors and the visitor would
+          // never learn that the box is what is actually missing.
+          if (!ensureLegalConsent()) {
+            event.preventDefault()
+            return
+          }
+          void form.handleSubmit(onSubmit)(event)
+        }}
         className={cn('grid gap-4', className)}
         {...props}
       >
@@ -361,17 +389,18 @@ export function SignUpForm({
           status={status}
           checked={agreedToLegal}
           onCheckedChange={setAgreedToLegal}
+          highlight={legalConsentHighlight}
           className='mt-1'
         />
 
-        {/* Submit Button */}
+        {/* Submit Button — stays enabled when the legal box is unticked on
+            purpose, so the click can explain what is missing. */}
         <Button
           type='submit'
           className='mt-2 w-full justify-center gap-2'
-          disabled={
-            isLoading ||
-            (requiresLegalConsent && !agreedToLegal) ||
-            !turnstileReady
+          disabled={isLoading || !turnstileReady}
+          aria-describedby={
+            legalConsentMissing ? 'legal-consent-error' : undefined
           }
         >
           {isLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : null}
@@ -381,7 +410,9 @@ export function SignUpForm({
         {oauthRegisterEnabled && (
           <OAuthProviders
             status={status}
-            disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
+            disabled={isLoading}
+            blocked={legalConsentMissing}
+            onBlockedClick={ensureLegalConsent}
             onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
             isWeChatLoading={isWeChatSubmitting}
             className='pt-2'
@@ -417,7 +448,7 @@ export function SignUpForm({
                 disabled={
                   isWeChatSubmitting ||
                   !wechatCode.trim() ||
-                  (requiresLegalConsent && !agreedToLegal)
+                  legalConsentMissing
                 }
                 className='gap-2'
               >

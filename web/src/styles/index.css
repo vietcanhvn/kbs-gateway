@@ -696,3 +696,32 @@ For commercial licensing, please contact support@quantumnous.com
     display: none;
   }
 }
+
+/* Legal consent box: short shake when the visitor tries to continue without
+   ticking it. Việc 025. */
+@keyframes legal-consent-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15%,
+  45%,
+  75% {
+    transform: translateX(-5px);
+  }
+  30%,
+  60%,
+  90% {
+    transform: translateX(5px);
+  }
+}
+
+.legal-consent-shake {
+  animation: legal-consent-shake 0.45s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legal-consent-shake {
+    animation: none;
+  }
+}

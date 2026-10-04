@@ -1,3 +1,5 @@
+> ⛔ **Nhánh `main` là bản CŨ, không triển khai, không sửa. Bản thật: nhánh `studio`.** Xem [KHONG_DUNG_NHANH_NAY.md](KHONG_DUNG_NHANH_NAY.md).
+
 <div align="center" data-project="dramaclaw-gateway">
 
 # dramaclaw-gateway

@@ -241,8 +241,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         </div>
       </div>
 
-      {/* Description */}
-      <p className='text-muted-foreground mt-2 line-clamp-1 flex-1 text-[13px] leading-relaxed sm:mt-4 sm:line-clamp-2 sm:min-h-[2.5rem]'>
+      {/* Description - KBS: 3-4 dòng, vì mô tả mở đầu bằng giá ước lượng (vd "≈ 35.200đ cho video 8 giây 720p") */}
+      <p
+        title={localizeModelDescription(props.model.description, i18n.language) || undefined}
+        className='text-muted-foreground mt-2 line-clamp-3 flex-1 text-[13px] leading-relaxed sm:mt-4 sm:line-clamp-4 sm:min-h-[5rem]'
+      >
         {localizeModelDescription(props.model.description, i18n.language) ||
           t('No description available.')}
       </p>

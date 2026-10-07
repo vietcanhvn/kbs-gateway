@@ -17,7 +17,7 @@ import (
 
 // Veo 3.1 limits (Gemini API "Generate videos with Veo 3.1" and Vertex AI
 // Veo reference docs):
-//   - referenceImages: at most 3, referenceType "asset", Veo 3.1 / 3.1 Fast;
+//   - referenceImages: at most 3, referenceType "ASSET", Veo 3.1 / 3.1 Fast;
 //     cannot be combined with image or lastFrame.
 //   - lastFrame: Veo 3.1 only and must be sent together with image.
 //   - durationSeconds must be 8 with referenceImages; DramaClaw also pins
@@ -25,7 +25,7 @@ import (
 const (
 	VeoMaxReferenceImages     = 3
 	VeoFixedDurationSeconds   = 8
-	veoReferenceTypeAsset     = "asset"
+	veoReferenceTypeAsset     = "ASSET" // như SDK @google/genai gửi (đã chạy thật qua KSB)
 	veoMediaContextKey        = "veo_media_inputs"
 	veoMediaErrInvalidRequest = "invalid_media_request"
 )

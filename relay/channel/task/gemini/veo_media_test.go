@@ -112,9 +112,9 @@ func TestVeoThreeReferenceImagesForcesEightSeconds(t *testing.T) {
 	assert.NotContains(t, inst, "image")
 	assert.NotContains(t, inst, "lastFrame")
 	assert.Equal(t, []any{
-		map[string]any{"image": map[string]any{"bytesBase64Encoded": "UkVGMQ==", "mimeType": "image/png"}, "referenceType": "asset"},
-		map[string]any{"image": map[string]any{"bytesBase64Encoded": "UkVGMg==", "mimeType": "image/webp"}, "referenceType": "asset"},
-		map[string]any{"image": map[string]any{"bytesBase64Encoded": "iVBORw0KGgo=", "mimeType": "image/png"}, "referenceType": "asset"},
+		map[string]any{"image": map[string]any{"bytesBase64Encoded": "UkVGMQ==", "mimeType": "image/png"}, "referenceType": "ASSET"},
+		map[string]any{"image": map[string]any{"bytesBase64Encoded": "UkVGMg==", "mimeType": "image/webp"}, "referenceType": "ASSET"},
+		map[string]any{"image": map[string]any{"bytesBase64Encoded": "iVBORw0KGgo=", "mimeType": "image/png"}, "referenceType": "ASSET"},
 	}, inst["referenceImages"])
 	params := body["parameters"].(map[string]any)
 	assert.EqualValues(t, 8, params["durationSeconds"])
@@ -136,7 +136,7 @@ func TestVeoReferenceImageFromURLIsDownloaded(t *testing.T) {
 	}`, "veo-3.1-generate-preview")
 	assert.Equal(t, []string{"https://example.com/a.jpg"}, fetched)
 	assert.Equal(t, []any{
-		map[string]any{"image": map[string]any{"bytesBase64Encoded": "SlBFRw==", "mimeType": "image/jpeg"}, "referenceType": "asset"},
+		map[string]any{"image": map[string]any{"bytesBase64Encoded": "SlBFRw==", "mimeType": "image/jpeg"}, "referenceType": "ASSET"},
 	}, veoInstance(t, body)["referenceImages"])
 }
 

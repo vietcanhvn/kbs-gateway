@@ -12,7 +12,7 @@ type VeoImageInput struct {
 // Media combinations accepted by Veo 3.1 (Gemini API and Vertex AI):
 //   - Image only: image-to-video (first frame).
 //   - Image + LastFrame: first/last frame interpolation; LastFrame needs Image.
-//   - ReferenceImages only (max 3, referenceType "asset"); cannot be combined
+//   - ReferenceImages only (max 3, referenceType "ASSET"); cannot be combined
 //     with Image or LastFrame.
 //
 // With LastFrame or ReferenceImages the gateway always sends durationSeconds=8.

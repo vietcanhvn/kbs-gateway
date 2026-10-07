@@ -17,9 +17,9 @@ capabilities. This table records human verification and known gaps.
 | Ali | `relay/channel/task/ali/` | Registered; full DC-Media coverage needs audit | Claim a protocol coverage audit and add missing-field tests |
 | Kling | `relay/channel/task/kling/` | Registered; full DC-Media coverage needs audit | Claim a protocol coverage audit and add missing-field tests |
 | Jimeng | `relay/channel/task/jimeng/` | Registered; full DC-Media coverage needs audit | Check last frame, multiple references, and explicit booleans |
-| Vertex AI | `relay/channel/task/vertex/` | Registered; full DC-Media coverage needs audit | Check last frame, multiple references, and result mapping |
+| Vertex AI | `relay/channel/task/vertex/` | Veo shares the Gemini DC-Media mapping (first frame, first+last frame, up to 3 reference images; see Gemini row) | Add real end-to-end evidence and audit result mapping |
 | Vidu | `relay/channel/task/vidu/` | Registered; full DC-Media coverage needs audit | Check last frame, multiple references, and video references |
-| Gemini | `relay/channel/task/gemini/` | Registered; full DC-Media coverage needs audit | Check media roles and provider capability declarations |
+| Gemini | `relay/channel/task/gemini/` | Veo DC-Media mapping exists: `image` -> first frame, `metadata.last_frame_image` -> `lastFrame` (needs a first frame, Veo 3.1 only), `metadata.reference_images` -> `referenceImages` (max 3, `asset`, Veo 3.1/3.1 Fast only, not combinable with first/last frame); with last frame or references the duration is pinned to 8 s (billed as 8 s); reference videos/audios/file/link are rejected (400) | Add real end-to-end evidence; audit Omni models separately |
 | OpenAI / Sora | `relay/channel/task/sora/` | Registered; full DC-Media coverage needs audit | Check asynchronous status and result proxying |
 | SunoAPI | `relay/channel/task/suno/` | Audio task adapter registered; not a DC-Media video adapter | Extend only after a public audio task contract is defined |
 

@@ -8,11 +8,25 @@ type VeoImageInput struct {
 }
 
 // VeoInstance represents a single instance in the Veo predictLongRunning request.
+//
+// Media combinations accepted by Veo 3.1 (Gemini API and Vertex AI):
+//   - Image only: image-to-video (first frame).
+//   - Image + LastFrame: first/last frame interpolation; LastFrame needs Image.
+//   - ReferenceImages only (max 3, referenceType "asset"); cannot be combined
+//     with Image or LastFrame.
+//
+// With LastFrame or ReferenceImages the gateway always sends durationSeconds=8.
 type VeoInstance struct {
-	Prompt string         `json:"prompt"`
-	Image  *VeoImageInput `json:"image,omitempty"`
-	// TODO: support referenceImages (style/asset references, up to 3 images)
-	// TODO: support lastFrame (first+last frame interpolation, Veo 3.1)
+	Prompt          string              `json:"prompt"`
+	Image           *VeoImageInput      `json:"image,omitempty"`
+	LastFrame       *VeoImageInput      `json:"lastFrame,omitempty"`
+	ReferenceImages []VeoReferenceImage `json:"referenceImages,omitempty"`
+}
+
+// VeoReferenceImage is one entry of instances[].referenceImages.
+type VeoReferenceImage struct {
+	Image         *VeoImageInput `json:"image"`
+	ReferenceType string         `json:"referenceType"`
 }
 
 // VeoParameters represents the parameters block for Veo predictLongRunning.

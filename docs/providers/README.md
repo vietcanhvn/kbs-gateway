@@ -14,9 +14,9 @@
 | Ali | `relay/channel/task/ali/` | 已注册，DC-Media 完整覆盖待审计 | 认领协议覆盖审计并补缺失字段测试 |
 | Kling | `relay/channel/task/kling/` | 已注册，DC-Media 完整覆盖待审计 | 认领协议覆盖审计并补缺失字段测试 |
 | Jimeng | `relay/channel/task/jimeng/` | 已注册，DC-Media 完整覆盖待审计 | 检查尾帧、多参考图及显式布尔值 |
-| Vertex AI | `relay/channel/task/vertex/` | 已注册，DC-Media 完整覆盖待审计 | 检查尾帧、多参考图和结果映射 |
+| Vertex AI | `relay/channel/task/vertex/` | Veo 与 Gemini 共用 DC-Media 映射（首帧、首尾帧、最多 3 张参考图，见 Gemini 行） | 补真实端到端证据和结果映射审计 |
 | Vidu | `relay/channel/task/vidu/` | 已注册，DC-Media 完整覆盖待审计 | 检查尾帧、多参考图及视频参考 |
-| Gemini | `relay/channel/task/gemini/` | 已注册，DC-Media 完整覆盖待审计 | 检查媒体角色及供应商能力声明 |
+| Gemini | `relay/channel/task/gemini/` | Veo 已适配 DC-Media：`image`→首帧，`metadata.last_frame_image`→`lastFrame`（需首帧，仅 Veo 3.1），`metadata.reference_images`→`referenceImages`（最多 3 张、`asset`，仅 Veo 3.1/3.1 Fast，不能与首/尾帧同用）；带尾帧或参考图时时长固定 8 秒（按 8 秒计费）；不支持参考视频/音频/文件/链接（400） | 补真实端到端证据；Omni 模型另行审计 |
 | OpenAI / Sora | `relay/channel/task/sora/` | 已注册，DC-Media 完整覆盖待审计 | 检查异步任务状态和结果代理 |
 | SunoAPI | `relay/channel/task/suno/` | 已注册音频任务，非 DC-Media 视频适配 | 在明确公共音频任务契约后再扩展 |
 

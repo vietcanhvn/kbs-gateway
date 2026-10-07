@@ -53,7 +53,8 @@ func ExtractMultipartImage(c *gin.Context, info *relaycommon.RelayInfo) *VeoImag
 
 // ParseImageInput parses an image string (data URI or raw base64) into a
 // VeoImageInput. Returns nil if the input is empty or invalid.
-// TODO: support downloading HTTP URL images and converting to base64
+// http(s) URLs are handled by resolveVeoImage (veo_media.go), which downloads
+// them with the gateway's SSRF protection and size limit.
 func ParseImageInput(imageStr string) *VeoImageInput {
 	imageStr = strings.TrimSpace(imageStr)
 	if imageStr == "" {

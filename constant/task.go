@@ -1,6 +1,21 @@
 package constant
 
+import "time"
+
 type TaskPlatform string
+
+const (
+	// GeminiOmniUpstreamTimeout: thời gian tối đa cổng chờ lời gọi chặn
+	// POST /v1beta/interactions của Google (thường 20–60 s).
+	GeminiOmniUpstreamTimeout = 15 * time.Minute
+	// GeminiOmniStaleAfter: interaction gemini-omni vẫn đang chạy sau mốc này
+	// nghĩa là cổng đã mất lời gọi (khởi động lại giữa chừng) → bộ poll đánh
+	// thất bại và hoàn tiền. Phải lớn hơn GeminiOmniUpstreamTimeout.
+	GeminiOmniStaleAfter = GeminiOmniUpstreamTimeout + 5*time.Minute
+	// GeminiOmniTaskIDPrefix: tiền tố id interaction do cổng cấp ("gw_…");
+	// id cũ (trước khi đổi thiết kế) là id interaction của Google.
+	GeminiOmniTaskIDPrefix = "gw_"
+)
 
 const (
 	TaskPlatformSuno       TaskPlatform = "suno"

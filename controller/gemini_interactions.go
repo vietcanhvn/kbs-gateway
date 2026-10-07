@@ -3,15 +3,20 @@ package controller
 // Chuyển tiếp Gemini Omni Flash (Interactions API) nguyên dạng Google cho client
 // chỉ có token cổng (KSB):
 //
-//	POST /v1beta/interactions            tạo video; cổng luôn gửi background=true nên
-//	                                     trả ngay id + status in_progress (Cloudflare
-//	                                     Tunnel cắt yêu cầu sau ~100 s)
-//	GET  /v1beta/interactions/{id}       hỏi trạng thái; khi xong thì quyết toán (1 lần)
-//	POST /v1beta/interactions/{id}:cancel huỷ; hoàn tiền trừ trước (1 lần)
+//	POST /v1beta/interactions            trả NGAY {"id":"gw_…","status":"in_progress"};
+//	                                     cổng tự gọi Google (POST chặn) trong goroutine
+//	GET  /v1beta/interactions/{id}       đọc trạng thái/kết quả từ dòng tasks (không gọi Google)
+//	POST /v1beta/interactions/{id}:cancel huỷ phía cổng; hoàn tiền trừ trước (1 lần)
 //	GET  /v1beta/files/{id}              metadata tệp (state PROCESSING/ACTIVE/FAILED)
 //	GET  /v1beta/files/{id}:download     tải video (truyền luồng)
 //
-// Mọi lời gọi sau POST dùng ĐÚNG kênh + key đã tạo interaction (lưu ở dòng
+// Vì sao không dùng interaction nền (background) của Google: GET
+// /v1beta/interactions/{id} của interaction nền luôn trả 400 "Multiple
+// authentication credentials received" với API key, nên không đọc lại được
+// video. POST chặn (không background, delivery "uri") thì chạy được nhưng mất
+// 20–60 s, quá lâu để giữ yêu cầu của client qua Cloudflare Tunnel (~100 s).
+//
+// Mọi lời gọi Google dùng ĐÚNG kênh + key đã tạo interaction (lưu ở dòng
 // tasks platform gemini-omni) và chỉ chủ sở hữu (cùng user) mới đọc được.
 // Cách tính tiền: xem relay/channel/task/gemini/omni.go.
 
@@ -21,6 +26,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -40,15 +46,21 @@ import (
 )
 
 const (
-	// omniCreateTimeout: tạo interaction nền thường trả trong vài giây.
-	omniCreateTimeout = 90 * time.Second
-	// omniMaxResponseBytes: chặn phản hồi base64 quá lớn.
+	// omniMaxResponseBytes: chặn phản hồi quá lớn.
 	omniMaxResponseBytes = 512 << 20
 	// omniFileLookupWindow: tệp Google tồn tại 48 giờ.
 	omniFileLookupWindow = 48 * time.Hour
 	// omniFileLookupLimit: số interaction gần nhất dò khi client không gửi interaction_id.
 	omniFileLookupLimit = 500
 )
+
+// omniJobs đếm các lời gọi Google đang chạy nền (để test chờ xong).
+var omniJobs sync.WaitGroup
+
+// WaitGeminiInteractionJobs chờ mọi lời gọi Google nền của Interactions kết thúc.
+func WaitGeminiInteractionJobs() {
+	omniJobs.Wait()
+}
 
 // omniError trả lỗi theo dạng của Google để client dùng chung một cách đọc lỗi.
 func omniError(c *gin.Context, status int, message string) {
@@ -78,6 +90,14 @@ func omniChannelBaseURL(base string) string {
 	return strings.TrimRight(base, "/")
 }
 
+func newOmniGatewayID() (string, error) {
+	key, err := common.GenerateRandomCharsKey(32)
+	if err != nil {
+		return "", err
+	}
+	return constant.GeminiOmniTaskIDPrefix + key, nil
+}
+
 // RelayGeminiInteraction: POST /v1beta/interactions (sau TokenAuth + Distribute).
 func RelayGeminiInteraction(c *gin.Context) {
 	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
@@ -103,8 +123,9 @@ func RelayGeminiInteraction(c *gin.Context) {
 		return
 	}
 
-	// Lượt tiếp theo (edit/extend) phải về đúng kênh + key của interaction trước:
-	// interaction của Google gắn với key/project đã tạo nó.
+	// Lượt tiếp theo (edit/extend): client gửi id cổng → đổi sang id interaction
+	// Google đã lưu, và phải về đúng kênh + key đã tạo nó (interaction gắn với key/project).
+	previousGoogleID := ""
 	if req.PreviousInteractionID != "" {
 		prev, exists, err := model.GetByTaskId(info.UserId, req.PreviousInteractionID)
 		if err != nil {
@@ -113,6 +134,11 @@ func RelayGeminiInteraction(c *gin.Context) {
 		}
 		if !exists || prev.Platform != constant.TaskPlatformGeminiOmni {
 			omniError(c, http.StatusNotFound, "previous_interaction_id not found for this account")
+			return
+		}
+		previousGoogleID = taskgemini.OmniGoogleInteractionID(prev)
+		if previousGoogleID == "" || prev.Status == model.TaskStatusFailure || prev.Status == model.TaskStatusCancelled {
+			omniError(c, http.StatusBadRequest, "previous interaction is not completed (still in progress, failed or cancelled)")
 			return
 		}
 		ch, err := model.GetChannelById(prev.ChannelId, true)
@@ -144,6 +170,20 @@ func RelayGeminiInteraction(c *gin.Context) {
 		return
 	}
 
+	// Dựng sẵn thân gửi Google (lỗi thì trả 400 trước khi trừ tiền). Google từ
+	// chối resolution (400 nhắc response_format, không tính tiền) thì gửi lại
+	// không có resolution. Không bao giờ bỏ delivery "uri": phản hồi được lưu
+	// vào CSDL nên không được chứa video base64.
+	var upstreamBodies [][]byte
+	for _, drop := range [][]string{nil, {"resolution"}} {
+		upstreamBody, err := taskgemini.BuildOmniUpstreamBody(body, info.UpstreamModelName, previousGoogleID, drop...)
+		if err != nil {
+			omniError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		upstreamBodies = append(upstreamBodies, upstreamBody)
+	}
+
 	// Giá: ModelPrice = USD mỗi giây video 720p; trừ trước mức tối đa 10 s.
 	priceData, err := helper.ModelPriceHelperPerCall(c, info)
 	if err != nil {
@@ -160,11 +200,30 @@ func RelayGeminiInteraction(c *gin.Context) {
 	info.PriceData = priceData
 	info.PriceData.AddOtherRatio("seconds", taskgemini.OmniPreChargeSeconds)
 	info.PriceData.AddOtherRatio("resolution", resolutionRatio)
-	info.PriceData.Quota = preQuota
 	if clamp != nil {
 		info.QuotaClamp = clamp
 	}
+	if info.PriceData.FreeModel {
+		preQuota = 0
+	}
+	info.PriceData.Quota = preQuota
 	info.Action = common.GetStringIfEmpty(req.Task, "interaction")
+
+	client, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
+	if err != nil {
+		omniError(c, http.StatusInternalServerError, "create upstream client failed")
+		return
+	}
+	// Thời hạn do context của lời gọi quyết định (GeminiOmniUpstreamTimeout),
+	// không theo RELAY_TIMEOUT chung.
+	jobClient := *client
+	jobClient.Timeout = 0
+
+	gatewayID, err := newOmniGatewayID()
+	if err != nil {
+		omniError(c, http.StatusInternalServerError, "generate interaction id failed")
+		return
+	}
 
 	if !info.PriceData.FreeModel {
 		info.ForcePreConsume = true
@@ -173,130 +232,14 @@ func RelayGeminiInteraction(c *gin.Context) {
 			return
 		}
 	}
-	settled := false
-	defer func() {
-		if !settled && info.Billing != nil {
-			info.Billing.Refund(c)
-		}
-	}()
-
-	// Không huỷ theo client: nếu client ngắt giữa chừng, Google vẫn có thể đã nhận
-	// việc, nên cổng vẫn đọc phản hồi để lưu interaction và giữ đúng tiền.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), omniCreateTimeout)
-	defer cancel()
-	upstreamURL := omniChannelBaseURL(info.ChannelBaseUrl) + "/" + taskgemini.OmniUpstreamAPIVersion + "/interactions"
-	client, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
-	if err != nil {
-		omniError(c, http.StatusInternalServerError, "create upstream client failed")
-		return
-	}
-
-	// Google từ chối một khoá tuỳ chọn của response_format (400, không tính tiền)
-	// thì gửi lại lần lượt không có delivery, rồi không có resolution.
-	var resp *http.Response
-	var respBody []byte
-	for _, drop := range [][]string{nil, {"delivery"}, {"delivery", "resolution"}} {
-		upstreamBody, err := taskgemini.BuildOmniUpstreamBody(body, info.UpstreamModelName, drop...)
-		if err != nil {
-			omniError(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, strings.NewReader(string(upstreamBody)))
-		if err != nil {
-			omniError(c, http.StatusInternalServerError, "build upstream request failed")
-			return
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Accept", "application/json")
-		httpReq.Header.Set("x-goog-api-key", info.ApiKey)
-		resp, err = client.Do(httpReq)
-		if err != nil {
-			logger.LogError(c, "gemini omni upstream request failed: "+err.Error())
-			omniError(c, http.StatusBadGateway, "upstream request failed")
-			return
-		}
-		respBody, err = io.ReadAll(io.LimitReader(resp.Body, omniMaxResponseBytes))
-		resp.Body.Close()
-		if err != nil {
-			omniError(c, http.StatusBadGateway, "read upstream response failed")
-			return
-		}
-		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(respBody), "response_format") {
-			break
-		}
-		logger.LogWarn(c, fmt.Sprintf("gemini omni: response_format rejected (dropped %v): %s", drop, string(respBody)))
-	}
-
-	// Google trả lỗi → không tính tiền (defer hoàn trừ trước), chuyển nguyên lỗi.
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		c.Data(resp.StatusCode, "application/json", respBody)
-		return
-	}
-	var interaction taskgemini.OmniInteraction
-	if err := common.Unmarshal(respBody, &interaction); err != nil || interaction.ID == "" {
-		omniError(c, http.StatusBadGateway, "unexpected upstream response (no interaction id)")
-		return
-	}
-
-	rewritten, fileIDs := taskgemini.RewriteOmniFileURIs(respBody, omniGatewayBase(c), interaction.ID)
-	taskStatus := taskgemini.OmniTaskStatus(interaction.Status)
-	if taskStatus == model.TaskStatusFailure {
-		// Interaction thất bại → không tính tiền, không cần lưu.
-		c.Data(resp.StatusCode, "application/json", rewritten)
-		return
-	}
-
-	summary := taskgemini.OmniTaskSummary{
-		InteractionID: interaction.ID,
-		Status:        interaction.Status,
-		Resolution:    req.Resolution,
-		Seconds:       taskgemini.OmniPreChargeSeconds,
-		SecondsSource: "estimate",
-	}
-	for _, id := range fileIDs {
-		summary.Files = append(summary.Files, "files/"+id)
-	}
-	progress := taskgemini.OmniProgressAwaitingDuration
-	finalQuota := preQuota
-	switch taskStatus {
-	case model.TaskStatusSuccess:
-		if seconds, source, ok := taskgemini.OmniBilledSeconds(respBody, &interaction, resolutionRatio); ok {
-			quota, quotaClamp := taskgemini.OmniQuota(priceData.ModelPrice, groupRatio, seconds, resolutionRatio)
-			if quotaClamp != nil {
-				info.QuotaClamp = quotaClamp
-			}
-			finalQuota = quota
-			summary.Seconds = seconds
-			summary.SecondsSource = source
-			info.PriceData.AddOtherRatio("seconds", seconds)
-			progress = taskcommon.ProgressComplete
-		}
-	default:
-		// Đang chạy nền: giữ mức trừ trước; GET interaction hoặc bộ poll quyết toán sau.
-		progress = taskcommon.ProgressInProgress
-	}
-	if info.PriceData.FreeModel {
-		finalQuota = 0
-	}
-	info.PriceData.Quota = finalQuota
-
-	if err := service.SettleBilling(c, info, finalQuota); err != nil {
-		common.SysError("settle gemini omni billing error: " + err.Error())
-	}
-	settled = true
-	service.LogTaskConsumption(c, info)
 
 	task := model.InitTask(constant.TaskPlatformGeminiOmni, info)
-	task.TaskID = interaction.ID
-	task.Status = taskStatus
-	task.Progress = progress
-	task.Quota = finalQuota
+	task.TaskID = gatewayID
+	task.Status = model.TaskStatusInProgress
+	task.Progress = taskcommon.ProgressInProgress
+	task.Quota = preQuota
 	task.Action = info.Action
 	task.StartTime = task.SubmitTime
-	if taskStatus == model.TaskStatusSuccess {
-		task.FinishTime = time.Now().Unix()
-	}
-	task.PrivateData.UpstreamTaskID = interaction.ID
 	task.PrivateData.BillingSource = info.BillingSource
 	task.PrivateData.SubscriptionId = info.SubscriptionId
 	task.PrivateData.TokenId = info.TokenId
@@ -307,13 +250,229 @@ func RelayGeminiInteraction(c *gin.Context) {
 		OtherRatios:     info.PriceData.OtherRatios(),
 		OriginModelName: info.OriginModelName,
 	}
-	task.SetData(summary)
+	task.SetData(taskgemini.OmniTaskSummary{
+		Status:        "in_progress",
+		Resolution:    req.Resolution,
+		Seconds:       taskgemini.OmniPreChargeSeconds,
+		SecondsSource: "estimate",
+		Model:         info.OriginModelName,
+	})
 	if err := task.Insert(); err != nil {
-		// Mất dòng này thì previous_interaction_id và tải tệp không tìm được kênh.
+		// Không có dòng task thì không theo dõi/hoàn tiền được → không gửi Google.
 		common.SysError("insert gemini omni task error: " + err.Error())
+		if info.Billing != nil {
+			info.Billing.Refund(c)
+		}
+		omniError(c, http.StatusInternalServerError, "create interaction failed")
+		return
 	}
 
-	c.Data(resp.StatusCode, "application/json", rewritten)
+	// Chốt mức trừ trước thành tiền của task; goroutine quyết toán lại theo
+	// usage (RecalculateTaskQuota) hoặc hoàn trọn (RefundTaskQuota) — CAS nên 1 lần.
+	if err := service.SettleBilling(c, info, preQuota); err != nil {
+		common.SysError("settle gemini omni billing error: " + err.Error())
+	}
+	service.LogTaskConsumption(c, info)
+
+	job := &omniJob{
+		ctx:         context.WithoutCancel(c.Request.Context()),
+		userID:      task.UserId,
+		gatewayID:   gatewayID,
+		upstreamURL: omniChannelBaseURL(info.ChannelBaseUrl) + "/" + taskgemini.OmniUpstreamAPIVersion + "/interactions",
+		apiKey:      info.ApiKey,
+		client:      &jobClient,
+		bodies:      upstreamBodies,
+	}
+	omniJobs.Add(1)
+	go job.run()
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":     gatewayID,
+		"object": "interaction",
+		"model":  info.OriginModelName,
+		"status": "in_progress",
+	})
+}
+
+// omniJob là một lời gọi chặn POST /v1beta/interactions tới Google, chạy sau khi
+// client đã nhận id. Không dùng *gin.Context (đã trả về pool).
+type omniJob struct {
+	ctx         context.Context
+	userID      int
+	gatewayID   string
+	upstreamURL string
+	apiKey      string
+	client      *http.Client
+	bodies      [][]byte
+}
+
+func (j *omniJob) run() {
+	defer omniJobs.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			common.SysError(fmt.Sprintf("gemini omni job %s panic: %v", j.gatewayID, r))
+			j.fail(0, "internal error while waiting for the upstream result")
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(j.ctx, constant.GeminiOmniUpstreamTimeout)
+	defer cancel()
+	statusCode, respBody, err := j.call(ctx)
+	if err != nil {
+		logger.LogError(j.ctx, fmt.Sprintf("gemini omni %s upstream request failed: %s", j.gatewayID, err.Error()))
+		j.fail(http.StatusBadGateway, "upstream request failed: "+err.Error())
+		return
+	}
+	if statusCode < 200 || statusCode >= 300 {
+		j.fail(statusCode, omniUpstreamErrorMessage(statusCode, respBody))
+		return
+	}
+	var interaction taskgemini.OmniInteraction
+	if err := common.Unmarshal(respBody, &interaction); err != nil || interaction.ID == "" {
+		j.fail(http.StatusBadGateway, "unexpected upstream response (no interaction id)")
+		return
+	}
+	switch taskgemini.OmniTaskStatus(interaction.Status) {
+	case model.TaskStatusSuccess:
+		j.complete(&interaction, respBody)
+	case model.TaskStatusFailure:
+		reason := "interaction " + interaction.Status
+		if interaction.Error != nil && interaction.Error.Message != "" {
+			reason = interaction.Error.Message
+		}
+		j.fail(0, reason)
+	default:
+		// Lời gọi chặn phải trả trạng thái cuối; trạng thái khác không đọc lại được.
+		j.fail(http.StatusBadGateway, "upstream returned non-final status "+interaction.Status)
+	}
+}
+
+// call gửi POST chặn; Google từ chối response_format (400) thì thử thân kế tiếp.
+func (j *omniJob) call(ctx context.Context) (int, []byte, error) {
+	var statusCode int
+	var respBody []byte
+	for i, upstreamBody := range j.bodies {
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, j.upstreamURL, strings.NewReader(string(upstreamBody)))
+		if err != nil {
+			return 0, nil, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Accept", "application/json")
+		httpReq.Header.Set("x-goog-api-key", j.apiKey)
+		resp, err := j.client.Do(httpReq)
+		if err != nil {
+			return 0, nil, err
+		}
+		respBody, err = io.ReadAll(io.LimitReader(resp.Body, omniMaxResponseBytes))
+		resp.Body.Close()
+		if err != nil {
+			return 0, nil, err
+		}
+		statusCode = resp.StatusCode
+		if statusCode != http.StatusBadRequest || !strings.Contains(string(respBody), "response_format") || i == len(j.bodies)-1 {
+			break
+		}
+		logger.LogWarn(j.ctx, fmt.Sprintf("gemini omni %s: response_format rejected, retrying with fewer options: %s", j.gatewayID, string(respBody)))
+	}
+	return statusCode, respBody, nil
+}
+
+// loadInProgress đọc lại dòng task; nil khi task đã kết thúc (huỷ / bộ poll dọn).
+func (j *omniJob) loadInProgress(googleID string) *model.Task {
+	task, exists, err := model.GetByTaskId(j.userID, j.gatewayID)
+	if err != nil || !exists {
+		common.SysError(fmt.Sprintf("gemini omni %s: task row not found (err=%v)", j.gatewayID, err))
+		return nil
+	}
+	if task.Status != model.TaskStatusInProgress {
+		// Kết quả về muộn (đã huỷ / đã dọn): giữ nguyên trạng thái và hoàn tiền.
+		// Google vẫn có thể đã tính tiền lượt này.
+		logger.LogWarn(j.ctx, fmt.Sprintf("gemini omni %s: upstream finished (google id %q) after the task became %s; result ignored, user stays refunded — Google may still bill this generation", j.gatewayID, googleID, task.Status))
+		return nil
+	}
+	return task
+}
+
+func (j *omniJob) complete(interaction *taskgemini.OmniInteraction, respBody []byte) {
+	task := j.loadInProgress(interaction.ID)
+	if task == nil {
+		return
+	}
+	adaptor := &taskgemini.OmniTaskAdaptor{}
+	result, err := adaptor.ParseTaskResult(respBody)
+	if err != nil {
+		j.fail(http.StatusBadGateway, "unexpected upstream response")
+		return
+	}
+	task.Status = model.TaskStatusSuccess
+	task.Progress = common.GetStringIfEmpty(result.Progress, taskcommon.ProgressComplete)
+	task.FinishTime = time.Now().Unix()
+	task.FailReason = ""
+	// Lưu nguyên phản hồi Google (chỉ URI, không base64); GET viết lại URI tệp về cổng.
+	task.Data = respBody
+	task.PrivateData.UpstreamTaskID = interaction.ID
+	won, err := task.UpdateWithStatus(model.TaskStatusInProgress)
+	if err != nil || !won {
+		logger.LogWarn(j.ctx, fmt.Sprintf("gemini omni %s: completion lost the status CAS (err=%v); google id %s", j.gatewayID, err, interaction.ID))
+		return
+	}
+	if task.Quota <= 0 {
+		return // mô hình miễn phí
+	}
+	if quota := adaptor.AdjustBillingOnComplete(task, result); quota > 0 {
+		service.RecalculateTaskQuota(j.ctx, task, quota, "gemini omni: usage")
+	}
+}
+
+// fail đánh thất bại (CAS) và hoàn trọn tiền trừ trước.
+func (j *omniJob) fail(code int, reason string) {
+	task := j.loadInProgress("")
+	if task == nil {
+		return
+	}
+	omniFailTask(j.ctx, task, "failed", code, reason)
+}
+
+// omniFailTask chuyển task đang chạy sang thất bại/huỷ và hoàn tiền (đúng 1 lần nhờ CAS).
+func omniFailTask(ctx context.Context, task *model.Task, status string, code int, reason string) bool {
+	var summary taskgemini.OmniTaskSummary
+	_ = common.Unmarshal(task.Data, &summary)
+	summary.Status = status
+	summary.Error = &taskgemini.OmniTaskError{Code: code, Message: reason}
+	previous := task.Status
+	task.Status = model.TaskStatusFailure
+	task.Progress = taskcommon.ProgressComplete
+	task.FinishTime = time.Now().Unix()
+	task.FailReason = reason
+	task.SetData(summary)
+	won, err := task.UpdateWithStatus(previous)
+	if err != nil || !won {
+		return false
+	}
+	if task.Quota != 0 {
+		service.RefundTaskQuota(ctx, task, reason)
+	}
+	return true
+}
+
+// omniUpstreamErrorMessage lấy error.message của Google, nếu không có thì thân phản hồi.
+func omniUpstreamErrorMessage(statusCode int, body []byte) string {
+	var envelope struct {
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := common.Unmarshal(body, &envelope); err == nil && envelope.Error != nil && envelope.Error.Message != "" {
+		return envelope.Error.Message
+	}
+	msg := strings.TrimSpace(string(body))
+	if len(msg) > 500 {
+		msg = msg[:500]
+	}
+	if msg == "" {
+		msg = http.StatusText(statusCode)
+	}
+	return fmt.Sprintf("upstream status %d: %s", statusCode, msg)
 }
 
 // omniOwnedTask tìm interaction của người dùng hiện tại.
@@ -331,7 +490,7 @@ func omniOwnedTask(c *gin.Context, interactionID string) (*model.Task, bool) {
 }
 
 // omniUpstream trả gốc URL, key và http client của kênh đã tạo interaction.
-// Kênh bị tắt vẫn đọc được: tệp/interaction vẫn sống dưới key đó.
+// Kênh bị tắt vẫn đọc được: tệp vẫn sống dưới key đó.
 func omniUpstream(task *model.Task) (string, string, *http.Client, error) {
 	ch, err := model.GetChannelById(task.ChannelId, true)
 	if err != nil {
@@ -351,47 +510,19 @@ func omniUpstream(task *model.Task) (string, string, *http.Client, error) {
 	return omniChannelBaseURL(ch.GetBaseURL()), key, client, nil
 }
 
-// GetGeminiInteraction: GET /v1beta/interactions/{id}.
+// GetGeminiInteraction: GET /v1beta/interactions/{id} — chỉ đọc dòng tasks.
+// Nhận cả id cổng ("gw_…") lẫn id Google của các dòng cũ.
 func GetGeminiInteraction(c *gin.Context) {
 	task, ok := omniOwnedTask(c, c.Param("id"))
 	if !ok {
 		return
 	}
-	baseURL, key, client, err := omniUpstream(task)
-	if err != nil {
-		omniError(c, http.StatusBadGateway, err.Error())
-		return
-	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
-	defer cancel()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, taskgemini.OmniInteractionURL(baseURL, task.TaskID), nil)
-	if err != nil {
-		omniError(c, http.StatusInternalServerError, "build upstream request failed")
-		return
-	}
-	httpReq.Header.Set("Accept", "application/json")
-	httpReq.Header.Set("x-goog-api-key", key)
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		omniError(c, http.StatusBadGateway, "upstream request failed")
-		return
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, omniMaxResponseBytes))
-	if err != nil {
-		omniError(c, http.StatusBadGateway, "read upstream response failed")
-		return
-	}
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		omniApplyInteractionResult(c.Request.Context(), task, respBody)
-	}
-	rewritten, _ := taskgemini.RewriteOmniFileURIs(respBody, omniGatewayBase(c), task.TaskID)
-	c.Data(resp.StatusCode, "application/json", rewritten)
+	c.Data(http.StatusOK, "application/json", taskgemini.OmniInteractionView(task, omniGatewayBase(c)))
 }
 
 // CancelGeminiInteraction: POST /v1beta/interactions/{id}:cancel.
-// Google xác nhận huỷ → hoàn tiền trừ trước (CAS nên chỉ một lần, kể cả khi bộ
-// poll hoặc lượt GET khác cũng thấy trạng thái cancelled).
+// Lời gọi chặn tới Google không huỷ được (chưa có id Google), nên cổng chỉ đánh
+// dấu huỷ + hoàn tiền (CAS: một lần); kết quả về muộn bị bỏ qua.
 func CancelGeminiInteraction(c *gin.Context) {
 	param := c.Param("id")
 	if !strings.HasSuffix(param, ":cancel") {
@@ -402,68 +533,16 @@ func CancelGeminiInteraction(c *gin.Context) {
 	if !ok {
 		return
 	}
-	baseURL, key, client, err := omniUpstream(task)
-	if err != nil {
-		omniError(c, http.StatusBadGateway, err.Error())
-		return
+	if task.Status != model.TaskStatusSuccess && task.Status != model.TaskStatusFailure && task.Status != model.TaskStatusCancelled {
+		ctx := context.WithoutCancel(c.Request.Context())
+		if omniFailTask(ctx, task, "cancelled", 0, "cancelled by client") {
+			logger.LogWarn(ctx, fmt.Sprintf("gemini omni %s cancelled while the upstream call may still run; user refunded, Google may still bill it", task.TaskID))
+		}
+		if fresh, exists, err := model.GetByTaskId(task.UserId, task.TaskID); err == nil && exists {
+			task = fresh
+		}
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 60*time.Second)
-	defer cancel()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, taskgemini.OmniInteractionURL(baseURL, task.TaskID)+":cancel", strings.NewReader("{}"))
-	if err != nil {
-		omniError(c, http.StatusInternalServerError, "build upstream request failed")
-		return
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", key)
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		omniError(c, http.StatusBadGateway, "upstream request failed")
-		return
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, omniMaxResponseBytes))
-	if err != nil {
-		omniError(c, http.StatusBadGateway, "read upstream response failed")
-		return
-	}
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		// Phản hồi huỷ là interaction (status cancelled); nếu Google chưa kịp đổi
-		// trạng thái thì lượt GET / bộ poll sau sẽ thấy cancelled và hoàn tiền.
-		omniApplyInteractionResult(ctx, task, respBody)
-	}
-	rewritten, _ := taskgemini.RewriteOmniFileURIs(respBody, omniGatewayBase(c), task.TaskID)
-	c.Data(resp.StatusCode, "application/json", rewritten)
-}
-
-// omniApplyInteractionResult: khi client tự hỏi interaction nền đã xong, cập nhật
-// task và quyết toán ngay (cùng CAS như bộ poll nên không bao giờ tính hai lần).
-func omniApplyInteractionResult(ctx context.Context, task *model.Task, respBody []byte) {
-	if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
-		return
-	}
-	adaptor := &taskgemini.OmniTaskAdaptor{}
-	result, err := adaptor.ParseTaskResult(respBody)
-	if err != nil || (result.Status != model.TaskStatusSuccess && result.Status != model.TaskStatusFailure) {
-		return
-	}
-	previous := task.Status
-	task.Status = model.TaskStatus(result.Status)
-	task.Progress = common.GetStringIfEmpty(result.Progress, taskcommon.ProgressComplete)
-	task.FinishTime = time.Now().Unix()
-	task.FailReason = result.Reason
-	task.Data = respBody
-	won, err := task.UpdateWithStatus(previous)
-	if err != nil || !won {
-		return
-	}
-	if task.Status == model.TaskStatusFailure {
-		service.RefundTaskQuota(ctx, task, task.FailReason)
-		return
-	}
-	if quota := adaptor.AdjustBillingOnComplete(task, result); quota > 0 {
-		service.RecalculateTaskQuota(ctx, task, quota, "gemini omni: usage")
-	}
+	c.Data(http.StatusOK, "application/json", taskgemini.OmniInteractionView(task, omniGatewayBase(c)))
 }
 
 // omniFindFileTask tìm interaction (của người dùng hiện tại) đã sinh ra tệp.

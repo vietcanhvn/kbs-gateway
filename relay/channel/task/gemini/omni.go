@@ -19,14 +19,23 @@ package gemini
 //     tải về qua cổng) — chỉ dùng để TRẢ LẠI phần trừ trước thừa.
 //  3. Không biết: giữ mức trừ trước OmniPreChargeSeconds (10 s, tối đa một lượt).
 //
-// Cổng LUÔN gửi background=true lên Google: api.kimbox.studio đi qua
-// Cloudflare Tunnel cắt mọi yêu cầu HTTP sau ~100 s, nên POST phải trả ngay
-// (id + status in_progress) rồi client hỏi GET /v1beta/interactions/{id}.
+// Cổng KHÔNG dùng interaction nền (background) của Google: GET
+// /v1beta/interactions/{id} của interaction nền luôn bị Google từ chối khi xác
+// thực bằng API key ("Multiple authentication credentials received"), nên
+// không bao giờ đọc lại được kết quả. Thay vào đó:
 //
-// Mỗi interaction được lưu thành một dòng tasks (platform gemini-omni,
-// task_id = id interaction) để: dính kênh/key cho lượt hỏi, huỷ, tải tệp và
-// previous_interaction_id; kiểm tra chủ sở hữu; và quyết toán ĐÚNG MỘT LẦN
-// (CAS trên trạng thái task) dù client hỏi nhiều lần hay bộ poll tác vụ chạy song song.
+//   - POST của client được trả NGAY (api.kimbox.studio đi qua Cloudflare Tunnel
+//     cắt mọi yêu cầu HTTP sau ~100 s) với id do cổng cấp ("gw_…") và
+//     status in_progress;
+//   - cổng tự gọi Google bằng POST CHẶN (không background, delivery "uri") trong
+//     goroutine, lưu phản hồi hoàn tất vào dòng tasks rồi quyết toán;
+//   - GET /v1beta/interactions/{id} đọc từ dòng tasks, không gọi Google.
+//
+// Mỗi interaction là một dòng tasks (platform gemini-omni, task_id = id cổng,
+// private_data.upstream_task_id = id interaction Google khi đã biết) để: dính
+// kênh/key cho tải tệp và previous_interaction_id; kiểm tra chủ sở hữu; và
+// quyết toán ĐÚNG MỘT LẦN (CAS trên trạng thái task) dù có huỷ, bộ poll dọn
+// tác vụ treo (cổng khởi động lại giữa chừng) hay kết quả về muộn.
 
 import (
 	"encoding/json"
@@ -41,7 +50,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/service"
 )
 
 const (
@@ -128,15 +136,16 @@ func ParseOmniRequest(body []byte) (*OmniRequest, error) {
 
 // BuildOmniUpstreamBody giữ nguyên thân yêu cầu, chỉ đổi:
 //   - model → tên mô hình phía Google (sau ánh xạ của kênh);
-//   - background = true (không chặn: Cloudflare Tunnel cắt yêu cầu sau ~100 s);
-//   - store: bỏ false — interaction nền phải được lưu thì mới hỏi/sửa tiếp được;
+//   - background: luôn bỏ (cổng gọi chặn trong goroutine; xem đầu tệp);
+//   - previous_interaction_id → id interaction Google (client gửi id cổng);
+//   - store: bỏ false — interaction phải được lưu thì lượt sau mới sửa/nối tiếp được;
 //   - response_format.type mặc định "video", delivery luôn "uri" (video tải sau
 //     qua cổng; phản hồi hỏi trạng thái được lưu vào CSDL nên không chứa base64).
 //   - response_format.duration bị bỏ: Google không nhận ("Invalid input at
 //     'response_format'"), độ dài do mô hình tự chọn (3-10 s).
 //
 // drop: các khoá tuỳ chọn của response_format phải bỏ (gửi lại khi Google từ chối).
-func BuildOmniUpstreamBody(body []byte, upstreamModel string, drop ...string) ([]byte, error) {
+func BuildOmniUpstreamBody(body []byte, upstreamModel, previousInteractionID string, drop ...string) ([]byte, error) {
 	var root map[string]json.RawMessage
 	if err := common.Unmarshal(body, &root); err != nil {
 		return nil, fmt.Errorf("invalid JSON body: %w", err)
@@ -146,7 +155,14 @@ func BuildOmniUpstreamBody(body []byte, upstreamModel string, drop ...string) ([
 		return nil, err
 	}
 	root["model"] = modelJSON
-	root["background"] = json.RawMessage(`true`)
+	delete(root, "background")
+	if previousInteractionID != "" {
+		prevJSON, err := common.Marshal(previousInteractionID)
+		if err != nil {
+			return nil, err
+		}
+		root["previous_interaction_id"] = prevJSON
+	}
 	if raw, ok := root["store"]; ok && string(raw) == "false" {
 		delete(root, "store")
 	}
@@ -293,6 +309,9 @@ func omniInlineVideos(respBody []byte) [][]byte {
 // https://generativelanguage.googleapis.com/v1beta/files/abc123:download?alt=media
 var omniFileURLPattern = regexp.MustCompile(`https://generativelanguage\.googleapis\.com/v1(?:beta|alpha)?/files/([A-Za-z0-9_-]+)(:download)?(?:\?[^"\s\\]*)?`)
 
+// omniGoogleFilesBase: gốc URI tệp Google (RewriteOmniFileURIs đổi sang URL cổng).
+const omniGoogleFilesBase = "https://generativelanguage.googleapis.com/v1beta/files/"
+
 // omniFileIDPattern khớp tên tệp "files/<id>" trong dữ liệu task đã lưu.
 var omniFileIDPattern = regexp.MustCompile(`files/([A-Za-z0-9_-]+)`)
 
@@ -372,16 +391,105 @@ type OmniTaskSummary struct {
 	Seconds       float64  `json:"seconds,omitempty"`
 	SecondsSource string   `json:"seconds_source,omitempty"` // usage | mp4 | file_metadata | estimate
 	Files         []string `json:"files,omitempty"`          // dạng "files/<id>"
+	Model         string   `json:"model,omitempty"`
+	// Error: lý do thất bại/huỷ (status failed | cancelled).
+	Error *OmniTaskError `json:"error,omitempty"`
+}
+
+// OmniTaskError là lỗi lưu kèm interaction thất bại (dạng error của Google).
+type OmniTaskError struct {
+	Code    int    `json:"code,omitempty"`
+	Message string `json:"message"`
+}
+
+// IsOmniGatewayID: id interaction do cổng cấp (không phải id Google của dòng cũ).
+func IsOmniGatewayID(id string) bool {
+	return strings.HasPrefix(id, constant.GeminiOmniTaskIDPrefix)
+}
+
+// OmniGoogleInteractionID trả id interaction Google của dòng task ("" khi
+// chưa biết: đang chạy, thất bại, huỷ). Dòng cũ dùng chính id Google làm task_id.
+func OmniGoogleInteractionID(task *model.Task) string {
+	if task.PrivateData.UpstreamTaskID != "" {
+		return task.PrivateData.UpstreamTaskID
+	}
+	if IsOmniGatewayID(task.TaskID) {
+		return ""
+	}
+	return task.TaskID
+}
+
+// omniFailedStatuses: trạng thái kết thúc không thành công của Google.
+var omniFailedStatuses = map[string]bool{"failed": true, "cancelled": true, "incomplete": true, "budget_exceeded": true}
+
+// OmniInteractionView dựng phản hồi GET /v1beta/interactions/{id} chỉ từ dòng
+// task (không gọi Google):
+//   - đang chạy → {"id","object","model","status":"in_progress"};
+//   - hoàn tất → phản hồi Google đã lưu (nguyên dạng), id thay bằng id cổng,
+//     URI tệp viết lại trỏ về cổng kèm interaction_id = id cổng;
+//   - thất bại/huỷ → {"id","object","model","status":"failed|cancelled","error":{…}}.
+func OmniInteractionView(task *model.Task, gatewayBase string) []byte {
+	head := map[string]any{"id": task.TaskID, "object": "interaction"}
+	var summary OmniTaskSummary
+	_ = common.Unmarshal(task.Data, &summary)
+	if m := common.GetStringIfEmpty(summary.Model, task.Properties.OriginModelName); m != "" {
+		head["model"] = m
+	}
+	switch task.Status {
+	case model.TaskStatusSuccess:
+		var stored map[string]json.RawMessage
+		if err := common.Unmarshal(task.Data, &stored); err == nil {
+			if _, isSummary := stored["interaction_id"]; !isSummary {
+				idJSON, _ := common.Marshal(task.TaskID)
+				stored["id"] = idJSON
+				if out, err := common.Marshal(stored); err == nil {
+					rewritten, _ := RewriteOmniFileURIs(out, gatewayBase, task.TaskID)
+					return rewritten
+				}
+			}
+		}
+		// Dòng cũ hoàn tất ngay lúc tạo chỉ lưu bản tóm tắt: dựng lại nội dung video từ danh sách tệp.
+		head["status"] = "completed"
+		var content []map[string]any
+		for _, name := range summary.Files {
+			id := strings.TrimPrefix(name, "files/")
+			content = append(content, map[string]any{"type": "video", "mime_type": "video/mp4", "uri": omniGoogleFilesBase + id + ":download?alt=media"})
+		}
+		if len(content) > 0 {
+			head["steps"] = []any{map[string]any{"type": "model_output", "content": content}}
+		}
+	case model.TaskStatusFailure, model.TaskStatusCancelled:
+		status := strings.ToLower(summary.Status)
+		if !omniFailedStatuses[status] {
+			status = "failed"
+		}
+		head["status"] = status
+		taskErr := OmniTaskError{Message: task.FailReason}
+		if summary.Error != nil {
+			taskErr = *summary.Error
+		}
+		if taskErr.Message == "" {
+			taskErr.Message = "interaction " + status
+		}
+		head["error"] = taskErr
+	default:
+		head["status"] = "in_progress"
+	}
+	out, _ := common.Marshal(head)
+	// Viết lại URI sau khi mã hoá: Marshal thoát "&" trong URL của cổng thành \u0026.
+	rewritten, _ := RewriteOmniFileURIs(out, gatewayBase, task.TaskID)
+	return rewritten
 }
 
 // ============================
 // Bộ poll tác vụ nền
 // ============================
 
-// OmniTaskAdaptor cho bộ poll tác vụ hỏi GET /v1beta/interactions/{id} và
-// quyết toán theo usage khi interaction nền hoàn tất. Nhúng TaskAdaptor (Veo)
-// chỉ để thoả giao diện channel.TaskAdaptor; nộp yêu cầu Omni không đi qua
-// luồng /v1/videos mà qua controller.RelayGeminiInteraction.
+// OmniTaskAdaptor chỉ để thoả giao diện channel.TaskAdaptor (nhúng TaskAdaptor
+// của Veo) và đọc phản hồi interaction (ParseTaskResult / AdjustBillingOnComplete).
+// Bộ poll KHÔNG hỏi Google cho tác vụ gemini-omni: kết quả do goroutine của
+// controller.RelayGeminiInteraction ghi; bộ poll chỉ dọn tác vụ treo
+// (service.finalizeStaleGeminiOmniTasks).
 type OmniTaskAdaptor struct {
 	TaskAdaptor
 }
@@ -394,29 +502,12 @@ func (a *OmniTaskAdaptor) GetChannelName() string {
 	return string(constant.TaskPlatformGeminiOmni)
 }
 
-// OmniInteractionURL dựng URL interaction phía Google (hỏi trạng thái).
-// Huỷ: OmniInteractionURL(...) + ":cancel".
-func OmniInteractionURL(baseURL, interactionID string) string {
-	return fmt.Sprintf("%s/%s/interactions/%s", strings.TrimRight(baseURL, "/"), OmniUpstreamAPIVersion, interactionID)
-}
+// ErrOmniNotPollable: GET interaction của Google từ chối API key với interaction nền.
+var ErrOmniNotPollable = fmt.Errorf("gemini-omni interactions are finalized by the gateway, not polled upstream")
 
-// FetchTask hỏi trạng thái interaction bằng đúng key đã tạo nó (task.PrivateData.Key).
-func (a *OmniTaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy string) (*http.Response, error) {
-	interactionID, _ := body["task_id"].(string)
-	if interactionID == "" {
-		return nil, fmt.Errorf("invalid task_id")
-	}
-	req, err := http.NewRequest(http.MethodGet, OmniInteractionURL(baseURL, interactionID), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("x-goog-api-key", key)
-	client, err := service.GetHttpClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+// FetchTask không bao giờ gọi Google (xem OmniTaskAdaptor).
+func (a *OmniTaskAdaptor) FetchTask(string, string, map[string]any, string) (*http.Response, error) {
+	return nil, ErrOmniNotPollable
 }
 
 // ParseTaskResult đổi phản hồi interaction sang TaskInfo. Lỗi tạm thời của

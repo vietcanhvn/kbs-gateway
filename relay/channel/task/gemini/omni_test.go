@@ -123,7 +123,7 @@ func TestParseOmniRequestValidatesBillingFields(t *testing.T) {
 	}
 }
 
-func TestBuildOmniUpstreamBodyIsNonBlockingAndKeepsInput(t *testing.T) {
+func TestBuildOmniUpstreamBodyNeverSendsBackgroundAndKeepsInput(t *testing.T) {
 	input := `[{"type":"text","text":"make it rain"},{"type":"image","data":"aGVsbG8=","mime_type":"image/png"}]`
 	tests := []struct {
 		name string
@@ -131,10 +131,11 @@ func TestBuildOmniUpstreamBodyIsNonBlockingAndKeepsInput(t *testing.T) {
 	}{
 		{name: "client omitted background and delivery", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `}`},
 		{name: "client asked for a blocking base64 call", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `,"background":false,"store":false,"response_format":{"type":"video","delivery":"base64","resolution":"1080p"}}`},
+		{name: "KSB sends background true", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `,"background":true,"previous_interaction_id":"gw_abc"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := BuildOmniUpstreamBody([]byte(tt.body), "gemini-omni-1.1-flash-upstream")
+			out, err := BuildOmniUpstreamBody([]byte(tt.body), "gemini-omni-1.1-flash-upstream", "")
 			require.NoError(t, err)
 			var got map[string]any
 			require.NoError(t, common.Unmarshal(out, &got))
@@ -142,8 +143,8 @@ func TestBuildOmniUpstreamBodyIsNonBlockingAndKeepsInput(t *testing.T) {
 			require.NoError(t, common.UnmarshalJsonStr(input, &wantInput))
 			assert.Equal(t, wantInput, got["input"])
 			assert.Equal(t, "gemini-omni-1.1-flash-upstream", got["model"])
-			assert.Equal(t, true, got["background"], "create must return before the ~100 s Cloudflare Tunnel cut-off")
-			assert.NotContains(t, got, "store", "background interactions must be stored")
+			assert.NotContains(t, got, "background", "Google GET interactions rejects API keys for background interactions")
+			assert.NotContains(t, got, "store", "interactions must be stored for follow-ups")
 			rf := got["response_format"].(map[string]any)
 			assert.Equal(t, "uri", rf["delivery"])
 			assert.Equal(t, "video", rf["type"])
@@ -291,7 +292,7 @@ func TestOmniTaskAdaptorAdjustBillingOnCompleteUsesUsage(t *testing.T) {
 
 func TestBuildOmniUpstreamBodyDropsDurationAndOptionalKeys(t *testing.T) {
 	in := []byte(`{"model":"gemini-omni-1.1-flash","input":"x","response_format":{"type":"video","aspect_ratio":"16:9","resolution":"720p","duration":6}}`)
-	out, err := BuildOmniUpstreamBody(in, "gemini-omni-1.1-flash")
+	out, err := BuildOmniUpstreamBody(in, "gemini-omni-1.1-flash", "")
 	require.NoError(t, err)
 	var parsed struct {
 		ResponseFormat map[string]any `json:"response_format"`
@@ -301,11 +302,60 @@ func TestBuildOmniUpstreamBodyDropsDurationAndOptionalKeys(t *testing.T) {
 	assert.Equal(t, "uri", parsed.ResponseFormat["delivery"])
 	assert.Equal(t, "720p", parsed.ResponseFormat["resolution"])
 
-	out, err = BuildOmniUpstreamBody(in, "gemini-omni-1.1-flash", "delivery", "resolution")
+	out, err = BuildOmniUpstreamBody(in, "gemini-omni-1.1-flash", "", "delivery", "resolution")
 	require.NoError(t, err)
 	parsed.ResponseFormat = nil
 	require.NoError(t, common.Unmarshal(out, &parsed))
 	assert.NotContains(t, parsed.ResponseFormat, "delivery")
 	assert.NotContains(t, parsed.ResponseFormat, "resolution")
 	assert.Equal(t, "video", parsed.ResponseFormat["type"])
+}
+
+func TestBuildOmniUpstreamBodyTranslatesPreviousInteractionID(t *testing.T) {
+	in := []byte(`{"model":"gemini-omni-1.1-flash","input":"night","background":true,"previous_interaction_id":"gw_abc"}`)
+	out, err := BuildOmniUpstreamBody(in, "gemini-omni-1.1-flash", "v1_google_1")
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(out, &got))
+	assert.Equal(t, "v1_google_1", got["previous_interaction_id"])
+	assert.NotContains(t, got, "background")
+}
+
+func TestOmniGoogleInteractionID(t *testing.T) {
+	assert.Equal(t, "", OmniGoogleInteractionID(&model.Task{TaskID: "gw_x"}), "gateway id without result has no Google id")
+	assert.Equal(t, "v1_g", OmniGoogleInteractionID(&model.Task{TaskID: "gw_x", PrivateData: model.TaskPrivateData{UpstreamTaskID: "v1_g"}}))
+	assert.Equal(t, "v1_legacy", OmniGoogleInteractionID(&model.Task{TaskID: "v1_legacy"}), "legacy rows use the Google id as task id")
+}
+
+func TestOmniInteractionViewServesFromTaskRow(t *testing.T) {
+	const base = "https://gw.example.test"
+	running := &model.Task{TaskID: "gw_1", Status: model.TaskStatusInProgress, Properties: model.Properties{OriginModelName: "gemini-omni-1.1-flash"}}
+	running.SetData(OmniTaskSummary{Status: "in_progress"})
+	assert.JSONEq(t, `{"id":"gw_1","object":"interaction","model":"gemini-omni-1.1-flash","status":"in_progress"}`, string(OmniInteractionView(running, base)))
+
+	done := &model.Task{TaskID: "gw_1", Status: model.TaskStatusSuccess,
+		Data: []byte(`{"id":"v1_google","status":"completed","steps":[{"type":"model_output","content":[{"type":"video","uri":"https://generativelanguage.googleapis.com/v1beta/files/f1:download?alt=media"}]}]}`)}
+	var view map[string]any
+	require.NoError(t, common.Unmarshal(OmniInteractionView(done, base), &view))
+	assert.Equal(t, "gw_1", view["id"], "Google id is never exposed")
+	assert.Equal(t, "completed", view["status"])
+	assert.Contains(t, string(OmniInteractionView(done, base)), base+"/v1beta/files/f1:download?alt=media&interaction_id=gw_1")
+
+	legacySummary := &model.Task{TaskID: "v1_old", Status: model.TaskStatusSuccess}
+	legacySummary.SetData(OmniTaskSummary{InteractionID: "v1_old", Status: "completed", Files: []string{"files/f9"}})
+	assert.Contains(t, string(OmniInteractionView(legacySummary, base)), base+"/v1beta/files/f9:download?alt=media&interaction_id=v1_old")
+
+	failed := &model.Task{TaskID: "gw_2", Status: model.TaskStatusFailure, FailReason: "bad prompt"}
+	failed.SetData(OmniTaskSummary{Status: "failed", Error: &OmniTaskError{Code: 400, Message: "bad prompt"}})
+	assert.JSONEq(t, `{"id":"gw_2","object":"interaction","status":"failed","error":{"code":400,"message":"bad prompt"}}`, string(OmniInteractionView(failed, base)))
+
+	cancelled := &model.Task{TaskID: "gw_3", Status: model.TaskStatusFailure, FailReason: "cancelled by client"}
+	cancelled.SetData(OmniTaskSummary{Status: "cancelled"})
+	assert.JSONEq(t, `{"id":"gw_3","object":"interaction","status":"cancelled","error":{"message":"cancelled by client"}}`, string(OmniInteractionView(cancelled, base)))
+}
+
+func TestOmniTaskAdaptorNeverFetchesUpstream(t *testing.T) {
+	resp, err := (&OmniTaskAdaptor{}).FetchTask("https://generativelanguage.googleapis.com", "k", map[string]any{"task_id": "v1"}, "")
+	assert.Nil(t, resp)
+	assert.ErrorIs(t, err, ErrOmniNotPollable)
 }

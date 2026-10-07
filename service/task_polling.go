@@ -185,9 +185,47 @@ func DispatchPlatformUpdate(ctx context.Context, platform constant.TaskPlatform,
 		// MJ 轮询由其自身处理，这里预留入口
 	case constant.TaskPlatformSuno:
 		_ = UpdateSunoTasks(ctx, taskChannelM, taskM)
+	case constant.TaskPlatformGeminiOmni:
+		finalizeStaleGeminiOmniTasks(ctx, taskM)
 	default:
 		if err := UpdateVideoTasks(ctx, platform, taskChannelM, taskM); err != nil {
 			common.SysLog(fmt.Sprintf("UpdateVideoTasks fail: %s", err))
+		}
+	}
+}
+
+// finalizeStaleGeminiOmniTasks: tác vụ Gemini Omni (POST /v1beta/interactions)
+// KHÔNG được hỏi Google — GET interaction của Google từ chối API key với
+// interaction nền. Kết quả do lời gọi chặn chạy nền của cổng ghi
+// (controller/gemini_interactions.go). Bộ poll chỉ dọn tác vụ mà lời gọi đó
+// đã mất (cổng khởi động lại giữa chừng, hoặc dòng cũ tạo bằng background):
+// quá GeminiOmniStaleAfter mà vẫn đang chạy → thất bại + hoàn tiền (CAS, 1 lần).
+func finalizeStaleGeminiOmniTasks(ctx context.Context, taskM map[string]*model.Task) {
+	cutoff := time.Now().Add(-constant.GeminiOmniStaleAfter).Unix()
+	reason := "upstream result was lost (gateway restarted or timed out); refunded"
+	for _, task := range taskM {
+		if ctx.Err() != nil {
+			return
+		}
+		if task.SubmitTime >= cutoff {
+			continue
+		}
+		previous := task.Status
+		task.Status = model.TaskStatusFailure
+		task.Progress = taskcommon.ProgressComplete
+		task.FinishTime = time.Now().Unix()
+		task.FailReason = reason
+		won, err := task.UpdateWithStatus(previous)
+		if err != nil {
+			logger.LogError(ctx, fmt.Sprintf("finalize stale gemini omni task %s error: %v", task.TaskID, err))
+			continue
+		}
+		if !won {
+			continue
+		}
+		logger.LogWarn(ctx, fmt.Sprintf("gemini omni task %s had no result after %s; marked failed and refunded (Google may still bill it)", task.TaskID, constant.GeminiOmniStaleAfter))
+		if task.Quota != 0 {
+			RefundTaskQuota(ctx, task, reason)
 		}
 	}
 }

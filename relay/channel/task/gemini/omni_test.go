@@ -288,3 +288,24 @@ func TestOmniTaskAdaptorAdjustBillingOnCompleteUsesUsage(t *testing.T) {
 	task.Data = []byte(`{"id":"v1","status":"completed"}`)
 	assert.Equal(t, 0, (&OmniTaskAdaptor{}).AdjustBillingOnComplete(task, nil), "no usage keeps the pre-charge")
 }
+
+func TestBuildOmniUpstreamBodyDropsDurationAndOptionalKeys(t *testing.T) {
+	in := []byte(`{"model":"gemini-omni-1.1-flash","input":"x","response_format":{"type":"video","aspect_ratio":"16:9","resolution":"720p","duration":6}}`)
+	out, err := BuildOmniUpstreamBody(in, "gemini-omni-1.1-flash")
+	require.NoError(t, err)
+	var parsed struct {
+		ResponseFormat map[string]any `json:"response_format"`
+	}
+	require.NoError(t, common.Unmarshal(out, &parsed))
+	assert.NotContains(t, parsed.ResponseFormat, "duration")
+	assert.Equal(t, "uri", parsed.ResponseFormat["delivery"])
+	assert.Equal(t, "720p", parsed.ResponseFormat["resolution"])
+
+	out, err = BuildOmniUpstreamBody(in, "gemini-omni-1.1-flash", "delivery", "resolution")
+	require.NoError(t, err)
+	parsed.ResponseFormat = nil
+	require.NoError(t, common.Unmarshal(out, &parsed))
+	assert.NotContains(t, parsed.ResponseFormat, "delivery")
+	assert.NotContains(t, parsed.ResponseFormat, "resolution")
+	assert.Equal(t, "video", parsed.ResponseFormat["type"])
+}

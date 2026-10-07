@@ -132,7 +132,11 @@ func ParseOmniRequest(body []byte) (*OmniRequest, error) {
 //   - store: bỏ false — interaction nền phải được lưu thì mới hỏi/sửa tiếp được;
 //   - response_format.type mặc định "video", delivery luôn "uri" (video tải sau
 //     qua cổng; phản hồi hỏi trạng thái được lưu vào CSDL nên không chứa base64).
-func BuildOmniUpstreamBody(body []byte, upstreamModel string) ([]byte, error) {
+//   - response_format.duration bị bỏ: Google không nhận ("Invalid input at
+//     'response_format'"), độ dài do mô hình tự chọn (3-10 s).
+//
+// drop: các khoá tuỳ chọn của response_format phải bỏ (gửi lại khi Google từ chối).
+func BuildOmniUpstreamBody(body []byte, upstreamModel string, drop ...string) ([]byte, error) {
 	var root map[string]json.RawMessage
 	if err := common.Unmarshal(body, &root); err != nil {
 		return nil, fmt.Errorf("invalid JSON body: %w", err)
@@ -157,6 +161,10 @@ func BuildOmniUpstreamBody(body []byte, upstreamModel string) ([]byte, error) {
 		responseFormat["type"] = json.RawMessage(`"video"`)
 	}
 	responseFormat["delivery"] = json.RawMessage(`"uri"`)
+	delete(responseFormat, "duration")
+	for _, key := range drop {
+		delete(responseFormat, key)
+	}
 	rfJSON, err := common.Marshal(responseFormat)
 	if err != nil {
 		return nil, err

@@ -180,41 +180,51 @@ func RelayGeminiInteraction(c *gin.Context) {
 		}
 	}()
 
-	upstreamBody, err := taskgemini.BuildOmniUpstreamBody(body, info.UpstreamModelName)
-	if err != nil {
-		omniError(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	// Không huỷ theo client: nếu client ngắt giữa chừng, Google vẫn có thể đã nhận
 	// việc, nên cổng vẫn đọc phản hồi để lưu interaction và giữ đúng tiền.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), omniCreateTimeout)
 	defer cancel()
 	upstreamURL := omniChannelBaseURL(info.ChannelBaseUrl) + "/" + taskgemini.OmniUpstreamAPIVersion + "/interactions"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, strings.NewReader(string(upstreamBody)))
-	if err != nil {
-		omniError(c, http.StatusInternalServerError, "build upstream request failed")
-		return
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-	httpReq.Header.Set("x-goog-api-key", info.ApiKey)
 	client, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
 	if err != nil {
 		omniError(c, http.StatusInternalServerError, "create upstream client failed")
 		return
 	}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		logger.LogError(c, "gemini omni upstream request failed: "+err.Error())
-		omniError(c, http.StatusBadGateway, "upstream request failed")
-		return
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, omniMaxResponseBytes))
-	if err != nil {
-		omniError(c, http.StatusBadGateway, "read upstream response failed")
-		return
+
+	// Google từ chối một khoá tuỳ chọn của response_format (400, không tính tiền)
+	// thì gửi lại lần lượt không có delivery, rồi không có resolution.
+	var resp *http.Response
+	var respBody []byte
+	for _, drop := range [][]string{nil, {"delivery"}, {"delivery", "resolution"}} {
+		upstreamBody, err := taskgemini.BuildOmniUpstreamBody(body, info.UpstreamModelName, drop...)
+		if err != nil {
+			omniError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, strings.NewReader(string(upstreamBody)))
+		if err != nil {
+			omniError(c, http.StatusInternalServerError, "build upstream request failed")
+			return
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Accept", "application/json")
+		httpReq.Header.Set("x-goog-api-key", info.ApiKey)
+		resp, err = client.Do(httpReq)
+		if err != nil {
+			logger.LogError(c, "gemini omni upstream request failed: "+err.Error())
+			omniError(c, http.StatusBadGateway, "upstream request failed")
+			return
+		}
+		respBody, err = io.ReadAll(io.LimitReader(resp.Body, omniMaxResponseBytes))
+		resp.Body.Close()
+		if err != nil {
+			omniError(c, http.StatusBadGateway, "read upstream response failed")
+			return
+		}
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(respBody), "response_format") {
+			break
+		}
+		logger.LogWarn(c, fmt.Sprintf("gemini omni: response_format rejected (dropped %v): %s", drop, string(respBody)))
 	}
 
 	// Google trả lỗi → không tính tiền (defer hoàn trừ trước), chuyển nguyên lỗi.

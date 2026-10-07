@@ -213,6 +213,8 @@ func SetRelayRouter(router *gin.Engine) {
 	{
 		geminiInteractionsRouter.POST("/interactions", middleware.ModelRequestRateLimit(), middleware.Distribute(), controller.RelayGeminiInteraction)
 		geminiInteractionsRouter.GET("/interactions/:id", controller.GetGeminiInteraction)
+		// :id là "<id>:cancel"
+		geminiInteractionsRouter.POST("/interactions/:id", controller.CancelGeminiInteraction)
 		// :name là "<id>" (metadata) hoặc "<id>:download" (tải video)
 		geminiInteractionsRouter.GET("/files/:name", controller.RelayGeminiFile)
 	}

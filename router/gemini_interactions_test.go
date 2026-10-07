@@ -2,6 +2,7 @@ package router
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
@@ -42,10 +45,11 @@ type fakeGoogle struct {
 	interaction string
 	// phản hồi GET /interactions/{id}
 	getTokens int
+	cancelled []string
 }
 
 func newFakeGoogle(t *testing.T) *fakeGoogle {
-	f := &fakeGoogle{status: http.StatusOK, interaction: "completed", fileBytes: omniTestMP4(1000, 6000)}
+	f := &fakeGoogle{status: http.StatusOK, interaction: "in_progress", fileBytes: omniTestMP4(1000, 6000)}
 	f.server = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.server.Close)
 	return f
@@ -73,10 +77,18 @@ func (f *fakeGoogle) handle(w http.ResponseWriter, r *http.Request) {
 		f.nextID++
 		id := fmt.Sprintf("v1_test_%d", f.nextID)
 		_, _ = w.Write([]byte(omniTestInteraction(id, f.interaction, f.videoTokens)))
+	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, ":cancel"):
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1beta/interactions/"), ":cancel")
+		f.cancelled = append(f.cancelled, id)
+		_, _ = w.Write([]byte(omniTestInteraction(id, "cancelled", 0)))
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1beta/interactions/"):
 		id := strings.TrimPrefix(r.URL.Path, "/v1beta/interactions/")
 		_, _ = w.Write([]byte(omniTestInteraction(id, "completed", f.getTokens)))
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, ":download"):
+		if r.URL.Query().Get("alt") != "media" {
+			http.Error(w, "alt=media required", http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Content-Type", "video/mp4")
 		_, _ = w.Write(f.fileBytes)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1beta/files/"):
@@ -205,62 +217,73 @@ func (f *omniFixture) task(t *testing.T, interactionID string) *model.Task {
 	return task
 }
 
-func TestGeminiInteractionChargesUsageSecondsAndRewritesFiles(t *testing.T) {
+// Luồng KSB: POST (trả ngay in_progress) → hỏi GET interaction tới completed →
+// GET metadata tệp tới ACTIVE → GET :download (không kèm ?alt=media).
+func TestGeminiInteractionKSBFlowChargesOnceFromUsage(t *testing.T) {
 	f := setupOmniFixture(t)
-	f.google.videoTokens = 8 * 5792 // 8 s 720p
+	f.google.getTokens = 8 * 5792 // 8 s 720p
 
-	resp := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0",
-		`{"model":"gemini-omni-1.1-flash","input":[{"type":"text","text":"a cat surfing"}],"generation_config":{"video_config":{"task":"text_to_video"}}}`)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	create := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0",
+		`{"model":"gemini-omni-1.1-flash","input":[{"type":"text","text":"a cat surfing"}],"background":true,"response_format":{"type":"video","delivery":"uri","aspect_ratio":"9:16"},"generation_config":{"video_config":{"task":"text_to_video"}}}`)
+	require.Equal(t, http.StatusOK, create.Code, create.Body.String())
+	assert.Contains(t, create.Body.String(), `"status":"in_progress"`)
 
-	// Thân gửi Google: giữ input, ép delivery uri; key là key kênh, không phải token cổng.
+	// Thân gửi Google: giữ input/aspect_ratio, background + uri; key là key kênh, không phải token cổng.
 	upstream := f.google.lastBody()
 	assert.Equal(t, omniTestModel, upstream["model"])
+	assert.Equal(t, true, upstream["background"])
 	assert.Equal(t, "uri", upstream["response_format"].(map[string]any)["delivery"])
+	assert.Equal(t, "9:16", upstream["response_format"].(map[string]any)["aspect_ratio"])
 	assert.Equal(t, "a cat surfing", upstream["input"].([]any)[0].(map[string]any)["text"])
 	usedKey := f.google.lastKey()
 	assert.Contains(t, f.channels, usedKey)
 
-	// Client chỉ thấy URL của cổng.
-	assert.NotContains(t, resp.Body.String(), "generativelanguage.googleapis.com")
-	assert.Contains(t, resp.Body.String(), omniTestGateway+"/v1beta/files/file_v1_test_1:download?alt=media&interaction_id=v1_test_1")
-
-	// 0,112 USD/giây × 8 s × 500000 quota/USD.
-	assert.Equal(t, 448000, f.spent(t))
+	// Đang chạy: giữ trừ trước 10 s.
+	assert.Equal(t, 560000, f.spent(t))
 	task := f.task(t, "v1_test_1")
 	assert.Equal(t, constant.TaskPlatformGeminiOmni, task.Platform)
 	assert.Equal(t, f.channels[usedKey], task.ChannelId)
 	assert.Equal(t, usedKey, task.PrivateData.Key)
-	assert.Equal(t, 448000, task.Quota)
+	assert.EqualValues(t, model.TaskStatusInProgress, task.Status)
+
+	// Hỏi nhiều lần: chỉ quyết toán một lần, về đúng 8 s (0,112 × 8 × 500000).
+	for i := 0; i < 3; i++ {
+		poll := f.do(t, http.MethodGet, "/v1beta/interactions/v1_test_1", "omnitoken0", "")
+		require.Equal(t, http.StatusOK, poll.Code, poll.Body.String())
+		assert.Contains(t, poll.Body.String(), `"status":"completed"`)
+		assert.NotContains(t, poll.Body.String(), "generativelanguage.googleapis.com")
+		assert.Contains(t, poll.Body.String(), omniTestGateway+"/v1beta/files/file_v1_test_1:download?alt=media&interaction_id=v1_test_1")
+		assert.Equal(t, usedKey, f.google.lastKey())
+		assert.Equal(t, 448000, f.spent(t))
+	}
+	task = f.task(t, "v1_test_1")
 	assert.EqualValues(t, model.TaskStatusSuccess, task.Status)
 	assert.Equal(t, "100%", task.Progress)
+	assert.Equal(t, 448000, task.Quota)
 
-	var logRow model.Log
-	require.NoError(t, model.DB.Where("user_id = ? AND type = ?", f.userID, model.LogTypeConsume).First(&logRow).Error)
-	assert.Equal(t, omniTestModel, logRow.ModelName)
-	assert.Equal(t, 448000, logRow.Quota)
+	var consumeLog model.Log
+	require.NoError(t, model.DB.Where("user_id = ? AND type = ?", f.userID, model.LogTypeConsume).First(&consumeLog).Error)
+	assert.Equal(t, omniTestModel, consumeLog.ModelName)
 
-	// Tải video qua cổng bằng đúng key đã tạo; người khác không tải được.
-	download := f.do(t, http.MethodGet, "/v1beta/files/file_v1_test_1:download?alt=media&interaction_id=v1_test_1", "omnitoken0", "")
-	require.Equal(t, http.StatusOK, download.Code, download.Body.String())
-	assert.Equal(t, f.google.fileBytes, download.Body.Bytes())
-	assert.Equal(t, usedKey, f.google.lastKey())
-
+	// Tệp: metadata rồi tải, đường dẫn đúng như KSB gọi (không ?alt=media, không interaction_id).
 	meta := f.do(t, http.MethodGet, "/v1beta/files/file_v1_test_1", "omnitoken0", "")
 	require.Equal(t, http.StatusOK, meta.Code, meta.Body.String())
 	assert.Contains(t, meta.Body.String(), `"state":"ACTIVE"`)
 	assert.NotContains(t, meta.Body.String(), "generativelanguage.googleapis.com")
-
-	other := f.do(t, http.MethodGet, "/v1beta/files/file_v1_test_1:download?alt=media", "omnitoken1", "")
-	assert.Equal(t, http.StatusNotFound, other.Code)
-	otherInteraction := f.do(t, http.MethodGet, "/v1beta/interactions/v1_test_1", "omnitoken1", "")
-	assert.Equal(t, http.StatusNotFound, otherInteraction.Code)
+	download := f.do(t, http.MethodGet, "/v1beta/files/file_v1_test_1:download", "omnitoken0", "")
+	require.Equal(t, http.StatusOK, download.Code, download.Body.String())
+	assert.Equal(t, f.google.fileBytes, download.Body.Bytes())
+	assert.Equal(t, usedKey, f.google.lastKey())
 	assert.Equal(t, 448000, f.spent(t), "reads never charge")
+
+	// Người dùng khác không đọc được interaction / tệp.
+	assert.Equal(t, http.StatusNotFound, f.do(t, http.MethodGet, "/v1beta/files/file_v1_test_1:download", "omnitoken1", "").Code)
+	assert.Equal(t, http.StatusNotFound, f.do(t, http.MethodGet, "/v1beta/interactions/v1_test_1", "omnitoken1", "").Code)
+	assert.Equal(t, http.StatusNotFound, f.do(t, http.MethodPost, "/v1beta/interactions/v1_test_1:cancel", "omnitoken1", "").Code)
 }
 
 func TestGeminiInteractionFollowUpStaysOnOriginalChannelKey(t *testing.T) {
 	f := setupOmniFixture(t)
-	f.google.videoTokens = 5 * 5792
 
 	first := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0", `{"model":"gemini-omni-1.1-flash","input":"a red car"}`)
 	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
@@ -272,7 +295,10 @@ func TestGeminiInteractionFollowUpStaysOnOriginalChannelKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, fresh.Code, fresh.Body.String())
 	assert.NotEqual(t, firstKey, f.google.lastKey())
 
-	// ...nhưng lượt sửa tiếp theo vẫn phải về đúng kênh + key của interaction trước.
+	// ...nhưng hỏi trạng thái và lượt sửa tiếp theo vẫn về đúng kênh + key cũ.
+	poll := f.do(t, http.MethodGet, "/v1beta/interactions/v1_test_1", "omnitoken0", "")
+	require.Equal(t, http.StatusOK, poll.Code, poll.Body.String())
+	assert.Equal(t, firstKey, f.google.lastKey())
 	edit := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0",
 		`{"model":"gemini-omni-1.1-flash","previous_interaction_id":"v1_test_1","input":"make it night","generation_config":{"video_config":{"task":"edit"}}}`)
 	require.Equal(t, http.StatusOK, edit.Code, edit.Body.String())
@@ -288,18 +314,20 @@ func TestGeminiInteractionFollowUpStaysOnOriginalChannelKey(t *testing.T) {
 
 func TestGeminiInteractionWithoutUsageRefundsFromDownloadedDuration(t *testing.T) {
 	f := setupOmniFixture(t)
-	f.google.videoTokens = 0 // Google không trả usage
+	f.google.getTokens = 0 // Google không trả usage
 
-	resp := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0",
+	create := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0",
 		`{"model":"gemini-omni-1.1-flash","input":"rain","response_format":{"type":"video","resolution":"1080p"}}`)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	// Chưa biết thời lượng: tính tạm 10 s × 1,5 (1080p).
+	require.Equal(t, http.StatusOK, create.Code, create.Body.String())
+	poll := f.do(t, http.MethodGet, "/v1beta/interactions/v1_test_1", "omnitoken0", "")
+	require.Equal(t, http.StatusOK, poll.Code, poll.Body.String())
+	// Chưa biết thời lượng: giữ tạm 10 s × 1,5 (1080p).
 	assert.Equal(t, 840000, f.spent(t))
 	assert.Equal(t, "99%", f.task(t, "v1_test_1").Progress)
 
 	// Tải về lần đầu: đọc mvhd (6 s) → trả lại 4 s; lần tải sau không đổi gì.
 	for i := 0; i < 2; i++ {
-		download := f.do(t, http.MethodGet, "/v1beta/files/file_v1_test_1:download?alt=media", "omnitoken0", "")
+		download := f.do(t, http.MethodGet, "/v1beta/files/file_v1_test_1:download", "omnitoken0", "")
 		require.Equal(t, http.StatusOK, download.Code, download.Body.String())
 		assert.Equal(t, 504000, f.spent(t))
 	}
@@ -323,28 +351,58 @@ func TestGeminiInteractionUpstreamErrorIsNotCharged(t *testing.T) {
 	assert.Equal(t, 0, f.spent(t))
 }
 
-func TestGeminiInteractionBackgroundSettlesWhenClientPolls(t *testing.T) {
+func TestGeminiInteractionCancelRefundsOnce(t *testing.T) {
 	f := setupOmniFixture(t)
-	f.google.interaction = "in_progress"
-	f.google.getTokens = 4 * 5792
 
-	resp := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0",
-		`{"model":"gemini-omni-1.1-flash","input":"waves","background":true,"response_format":{"delivery":"base64"}}`)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	assert.Equal(t, "uri", f.google.lastBody()["response_format"].(map[string]any)["delivery"])
-	assert.Equal(t, 560000, f.spent(t), "10 s held while running")
-	assert.EqualValues(t, model.TaskStatusInProgress, f.task(t, "v1_test_1").Status)
+	create := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0", `{"model":"gemini-omni-1.1-flash","input":"waves"}`)
+	require.Equal(t, http.StatusOK, create.Code, create.Body.String())
+	assert.Equal(t, 560000, f.spent(t))
+	usedKey := f.google.lastKey()
+
+	for i := 0; i < 2; i++ {
+		cancel := f.do(t, http.MethodPost, "/v1beta/interactions/v1_test_1:cancel", "omnitoken0", "")
+		require.Equal(t, http.StatusOK, cancel.Code, cancel.Body.String())
+		assert.Contains(t, cancel.Body.String(), `"status":"cancelled"`)
+		assert.Equal(t, 0, f.spent(t))
+	}
+	assert.Equal(t, []string{"v1_test_1", "v1_test_1"}, f.google.cancelled)
+	assert.Equal(t, usedKey, f.google.lastKey())
+	task := f.task(t, "v1_test_1")
+	assert.EqualValues(t, model.TaskStatusFailure, task.Status)
+	assert.Equal(t, 0, task.Quota)
+
+	var refunds int64
+	require.NoError(t, model.DB.Model(&model.Log{}).Where("user_id = ? AND type = ?", f.userID, model.LogTypeRefund).Count(&refunds).Error)
+	assert.EqualValues(t, 1, refunds)
+}
+
+// Bộ poll tác vụ của cổng và lượt hỏi của client cùng thấy completed: chỉ một bên quyết toán.
+func TestGeminiInteractionTaskPollerAndClientPollSettleOnce(t *testing.T) {
+	f := setupOmniFixture(t)
+	f.google.getTokens = 3 * 5792
+	previousFactory := service.GetTaskAdaptorFunc
+	service.GetTaskAdaptorFunc = func(platform constant.TaskPlatform) service.TaskPollingAdaptor {
+		if a := relay.GetTaskAdaptor(platform); a != nil {
+			return a
+		}
+		return nil
+	}
+	previousLimit := constant.TaskQueryLimit
+	constant.TaskQueryLimit = 100
+	t.Cleanup(func() {
+		service.GetTaskAdaptorFunc = previousFactory
+		constant.TaskQueryLimit = previousLimit
+	})
+
+	create := f.do(t, http.MethodPost, "/v1beta/interactions", "omnitoken0", `{"model":"gemini-omni-1.1-flash","input":"snow"}`)
+	require.Equal(t, http.StatusOK, create.Code, create.Body.String())
+	assert.Equal(t, 560000, f.spent(t))
+
+	service.RunTaskPollingOnce(context.Background(), nil)
+	assert.Equal(t, 168000, f.spent(t), "poller settled to 3 s")
+	assert.EqualValues(t, model.TaskStatusSuccess, f.task(t, "v1_test_1").Status)
 
 	poll := f.do(t, http.MethodGet, "/v1beta/interactions/v1_test_1", "omnitoken0", "")
 	require.Equal(t, http.StatusOK, poll.Code, poll.Body.String())
-	assert.Contains(t, poll.Body.String(), omniTestGateway+"/v1beta/files/file_v1_test_1:download")
-	assert.Equal(t, 224000, f.spent(t), "settled to 4 s")
-	task := f.task(t, "v1_test_1")
-	assert.EqualValues(t, model.TaskStatusSuccess, task.Status)
-	assert.Equal(t, 224000, task.Quota)
-
-	// Hỏi lại không tính thêm lần nào.
-	again := f.do(t, http.MethodGet, "/v1beta/interactions/v1_test_1", "omnitoken0", "")
-	require.Equal(t, http.StatusOK, again.Code)
-	assert.Equal(t, 224000, f.spent(t))
+	assert.Equal(t, 168000, f.spent(t), "client poll after the poller does not charge again")
 }

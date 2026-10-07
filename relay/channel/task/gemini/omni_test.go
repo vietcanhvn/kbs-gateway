@@ -101,9 +101,9 @@ func TestParseOmniRequestValidatesBillingFields(t *testing.T) {
 			want: &OmniRequest{Model: "gemini-omni-1.1-flash", Resolution: "720p"},
 		},
 		{
-			name: "upper-case 4K, background, follow-up and task",
+			name: "upper-case 4K, follow-up and task",
 			body: `{"model":"gemini-omni-1.1-flash","background":true,"previous_interaction_id":"v1_abc","response_format":{"type":"video","resolution":"4K"},"generation_config":{"video_config":{"task":"extend"}}}`,
-			want: &OmniRequest{Model: "gemini-omni-1.1-flash", Resolution: "4k", Background: true, PreviousInteractionID: "v1_abc", Task: "extend"},
+			want: &OmniRequest{Model: "gemini-omni-1.1-flash", Resolution: "4k", PreviousInteractionID: "v1_abc", Task: "extend"},
 		},
 		{name: "unknown resolution is a 400", body: `{"model":"m","response_format":{"resolution":"8k"}}`, wantErr: "unsupported response_format.resolution"},
 		{name: "non-video output is refused", body: `{"model":"m","response_format":{"type":"text"}}`, wantErr: "must be \"video\""},
@@ -123,21 +123,18 @@ func TestParseOmniRequestValidatesBillingFields(t *testing.T) {
 	}
 }
 
-func TestBuildOmniUpstreamBodyKeepsInputAndForcesURIDelivery(t *testing.T) {
+func TestBuildOmniUpstreamBodyIsNonBlockingAndKeepsInput(t *testing.T) {
 	input := `[{"type":"text","text":"make it rain"},{"type":"image","data":"aGVsbG8=","mime_type":"image/png"}]`
 	tests := []struct {
-		name         string
-		body         string
-		background   bool
-		wantDelivery string
+		name string
+		body string
 	}{
-		{name: "delivery defaults to uri", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `}`, wantDelivery: "uri"},
-		{name: "explicit base64 kept for sync calls", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `,"response_format":{"type":"video","delivery":"base64","resolution":"1080p"}}`, wantDelivery: "base64"},
-		{name: "background always uses uri", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `,"background":true,"response_format":{"delivery":"base64"}}`, background: true, wantDelivery: "uri"},
+		{name: "client omitted background and delivery", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `}`},
+		{name: "client asked for a blocking base64 call", body: `{"model":"gemini-omni-1.1-flash","input":` + input + `,"background":false,"store":false,"response_format":{"type":"video","delivery":"base64","resolution":"1080p"}}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := BuildOmniUpstreamBody([]byte(tt.body), "gemini-omni-1.1-flash-upstream", tt.background)
+			out, err := BuildOmniUpstreamBody([]byte(tt.body), "gemini-omni-1.1-flash-upstream")
 			require.NoError(t, err)
 			var got map[string]any
 			require.NoError(t, common.Unmarshal(out, &got))
@@ -145,8 +142,10 @@ func TestBuildOmniUpstreamBodyKeepsInputAndForcesURIDelivery(t *testing.T) {
 			require.NoError(t, common.UnmarshalJsonStr(input, &wantInput))
 			assert.Equal(t, wantInput, got["input"])
 			assert.Equal(t, "gemini-omni-1.1-flash-upstream", got["model"])
+			assert.Equal(t, true, got["background"], "create must return before the ~100 s Cloudflare Tunnel cut-off")
+			assert.NotContains(t, got, "store", "background interactions must be stored")
 			rf := got["response_format"].(map[string]any)
-			assert.Equal(t, tt.wantDelivery, rf["delivery"])
+			assert.Equal(t, "uri", rf["delivery"])
 			assert.Equal(t, "video", rf["type"])
 		})
 	}

@@ -3,8 +3,11 @@ package controller
 // Chuyển tiếp Gemini Omni Flash (Interactions API) nguyên dạng Google cho client
 // chỉ có token cổng (KSB):
 //
-//	POST /v1beta/interactions            tạo video (đồng bộ hoặc background=true)
-//	GET  /v1beta/interactions/{id}       hỏi trạng thái interaction nền
+//	POST /v1beta/interactions            tạo video; cổng luôn gửi background=true nên
+//	                                     trả ngay id + status in_progress (Cloudflare
+//	                                     Tunnel cắt yêu cầu sau ~100 s)
+//	GET  /v1beta/interactions/{id}       hỏi trạng thái; khi xong thì quyết toán (1 lần)
+//	POST /v1beta/interactions/{id}:cancel huỷ; hoàn tiền trừ trước (1 lần)
 //	GET  /v1beta/files/{id}              metadata tệp (state PROCESSING/ACTIVE/FAILED)
 //	GET  /v1beta/files/{id}:download     tải video (truyền luồng)
 //
@@ -37,8 +40,8 @@ import (
 )
 
 const (
-	// omniGenerateTimeout: một lượt tạo đồng bộ có thể mất vài phút.
-	omniGenerateTimeout = 15 * time.Minute
+	// omniCreateTimeout: tạo interaction nền thường trả trong vài giây.
+	omniCreateTimeout = 90 * time.Second
 	// omniMaxResponseBytes: chặn phản hồi base64 quá lớn.
 	omniMaxResponseBytes = 512 << 20
 	// omniFileLookupWindow: tệp Google tồn tại 48 giờ.
@@ -177,15 +180,15 @@ func RelayGeminiInteraction(c *gin.Context) {
 		}
 	}()
 
-	upstreamBody, err := taskgemini.BuildOmniUpstreamBody(body, info.UpstreamModelName, req.Background)
+	upstreamBody, err := taskgemini.BuildOmniUpstreamBody(body, info.UpstreamModelName)
 	if err != nil {
 		omniError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Không huỷ theo client: nếu client ngắt giữa chừng, Google vẫn tạo và tính
-	// tiền, nên cổng vẫn chờ kết quả để quyết toán và lưu interaction.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), omniGenerateTimeout)
+	// Không huỷ theo client: nếu client ngắt giữa chừng, Google vẫn có thể đã nhận
+	// việc, nên cổng vẫn đọc phản hồi để lưu interaction và giữ đúng tiền.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), omniCreateTimeout)
 	defer cancel()
 	upstreamURL := omniChannelBaseURL(info.ChannelBaseUrl) + "/" + taskgemini.OmniUpstreamAPIVersion + "/interactions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, strings.NewReader(string(upstreamBody)))
@@ -259,7 +262,7 @@ func RelayGeminiInteraction(c *gin.Context) {
 			progress = taskcommon.ProgressComplete
 		}
 	default:
-		// background=true: giữ mức trừ trước; bộ poll (hoặc GET interaction) quyết toán sau.
+		// Đang chạy nền: giữ mức trừ trước; GET interaction hoặc bộ poll quyết toán sau.
 		progress = taskcommon.ProgressInProgress
 	}
 	if info.PriceData.FreeModel {
@@ -371,6 +374,53 @@ func GetGeminiInteraction(c *gin.Context) {
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		omniApplyInteractionResult(c.Request.Context(), task, respBody)
+	}
+	rewritten, _ := taskgemini.RewriteOmniFileURIs(respBody, omniGatewayBase(c), task.TaskID)
+	c.Data(resp.StatusCode, "application/json", rewritten)
+}
+
+// CancelGeminiInteraction: POST /v1beta/interactions/{id}:cancel.
+// Google xác nhận huỷ → hoàn tiền trừ trước (CAS nên chỉ một lần, kể cả khi bộ
+// poll hoặc lượt GET khác cũng thấy trạng thái cancelled).
+func CancelGeminiInteraction(c *gin.Context) {
+	param := c.Param("id")
+	if !strings.HasSuffix(param, ":cancel") {
+		omniError(c, http.StatusNotFound, "unsupported interaction action")
+		return
+	}
+	task, ok := omniOwnedTask(c, strings.TrimSuffix(param, ":cancel"))
+	if !ok {
+		return
+	}
+	baseURL, key, client, err := omniUpstream(task)
+	if err != nil {
+		omniError(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 60*time.Second)
+	defer cancel()
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, taskgemini.OmniInteractionURL(baseURL, task.TaskID)+":cancel", strings.NewReader("{}"))
+	if err != nil {
+		omniError(c, http.StatusInternalServerError, "build upstream request failed")
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", key)
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		omniError(c, http.StatusBadGateway, "upstream request failed")
+		return
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, omniMaxResponseBytes))
+	if err != nil {
+		omniError(c, http.StatusBadGateway, "read upstream response failed")
+		return
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		// Phản hồi huỷ là interaction (status cancelled); nếu Google chưa kịp đổi
+		// trạng thái thì lượt GET / bộ poll sau sẽ thấy cancelled và hoàn tiền.
+		omniApplyInteractionResult(ctx, task, respBody)
 	}
 	rewritten, _ := taskgemini.RewriteOmniFileURIs(respBody, omniGatewayBase(c), task.TaskID)
 	c.Data(resp.StatusCode, "application/json", rewritten)

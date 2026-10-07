@@ -19,10 +19,14 @@ package gemini
 //     tải về qua cổng) — chỉ dùng để TRẢ LẠI phần trừ trước thừa.
 //  3. Không biết: giữ mức trừ trước OmniPreChargeSeconds (10 s, tối đa một lượt).
 //
+// Cổng LUÔN gửi background=true lên Google: api.kimbox.studio đi qua
+// Cloudflare Tunnel cắt mọi yêu cầu HTTP sau ~100 s, nên POST phải trả ngay
+// (id + status in_progress) rồi client hỏi GET /v1beta/interactions/{id}.
+//
 // Mỗi interaction được lưu thành một dòng tasks (platform gemini-omni,
-// task_id = id interaction) để: dính kênh/key cho previous_interaction_id và
-// tải tệp, kiểm tra chủ sở hữu, và để bộ poll tác vụ nền quyết toán khi client
-// dùng background=true.
+// task_id = id interaction) để: dính kênh/key cho lượt hỏi, huỷ, tải tệp và
+// previous_interaction_id; kiểm tra chủ sở hữu; và quyết toán ĐÚNG MỘT LẦN
+// (CAS trên trạng thái task) dù client hỏi nhiều lần hay bộ poll tác vụ chạy song song.
 
 import (
 	"encoding/json"
@@ -73,14 +77,12 @@ type OmniRequest struct {
 	Model                 string
 	PreviousInteractionID string
 	Resolution            string
-	Background            bool
 	Task                  string // generation_config.video_config.task
 }
 
 type omniRequestFields struct {
 	Model                 string `json:"model"`
 	PreviousInteractionID string `json:"previous_interaction_id"`
-	Background            *bool  `json:"background"`
 	ResponseFormat        *struct {
 		Type       string `json:"type"`
 		Resolution string `json:"resolution"`
@@ -103,7 +105,6 @@ func ParseOmniRequest(body []byte) (*OmniRequest, error) {
 		Model:                 strings.TrimSpace(fields.Model),
 		PreviousInteractionID: strings.TrimSpace(fields.PreviousInteractionID),
 		Resolution:            OmniDefaultResolution,
-		Background:            fields.Background != nil && *fields.Background,
 	}
 	if req.Model == "" {
 		return nil, fmt.Errorf("model is required")
@@ -127,10 +128,11 @@ func ParseOmniRequest(body []byte) (*OmniRequest, error) {
 
 // BuildOmniUpstreamBody giữ nguyên thân yêu cầu, chỉ đổi:
 //   - model → tên mô hình phía Google (sau ánh xạ của kênh);
-//   - response_format.type mặc định "video";
-//   - response_format.delivery mặc định "uri" để phản hồi nhỏ (video tải sau qua
-//     cổng); với background=true luôn ép "uri" để không lưu base64 vào CSDL.
-func BuildOmniUpstreamBody(body []byte, upstreamModel string, background bool) ([]byte, error) {
+//   - background = true (không chặn: Cloudflare Tunnel cắt yêu cầu sau ~100 s);
+//   - store: bỏ false — interaction nền phải được lưu thì mới hỏi/sửa tiếp được;
+//   - response_format.type mặc định "video", delivery luôn "uri" (video tải sau
+//     qua cổng; phản hồi hỏi trạng thái được lưu vào CSDL nên không chứa base64).
+func BuildOmniUpstreamBody(body []byte, upstreamModel string) ([]byte, error) {
 	var root map[string]json.RawMessage
 	if err := common.Unmarshal(body, &root); err != nil {
 		return nil, fmt.Errorf("invalid JSON body: %w", err)
@@ -140,6 +142,10 @@ func BuildOmniUpstreamBody(body []byte, upstreamModel string, background bool) (
 		return nil, err
 	}
 	root["model"] = modelJSON
+	root["background"] = json.RawMessage(`true`)
+	if raw, ok := root["store"]; ok && string(raw) == "false" {
+		delete(root, "store")
+	}
 
 	responseFormat := map[string]json.RawMessage{}
 	if raw, ok := root["response_format"]; ok && string(raw) != "null" {
@@ -150,13 +156,7 @@ func BuildOmniUpstreamBody(body []byte, upstreamModel string, background bool) (
 	if _, ok := responseFormat["type"]; !ok {
 		responseFormat["type"] = json.RawMessage(`"video"`)
 	}
-	delivery := ""
-	if raw, ok := responseFormat["delivery"]; ok {
-		_ = common.Unmarshal(raw, &delivery)
-	}
-	if delivery == "" || (background && !strings.EqualFold(delivery, "uri")) {
-		responseFormat["delivery"] = json.RawMessage(`"uri"`)
-	}
+	responseFormat["delivery"] = json.RawMessage(`"uri"`)
 	rfJSON, err := common.Marshal(responseFormat)
 	if err != nil {
 		return nil, err
@@ -367,7 +367,7 @@ type OmniTaskSummary struct {
 }
 
 // ============================
-// Bộ poll tác vụ nền (background=true)
+// Bộ poll tác vụ nền
 // ============================
 
 // OmniTaskAdaptor cho bộ poll tác vụ hỏi GET /v1beta/interactions/{id} và
@@ -386,7 +386,8 @@ func (a *OmniTaskAdaptor) GetChannelName() string {
 	return string(constant.TaskPlatformGeminiOmni)
 }
 
-// OmniInteractionURL dựng URL interaction phía Google.
+// OmniInteractionURL dựng URL interaction phía Google (hỏi trạng thái).
+// Huỷ: OmniInteractionURL(...) + ":cancel".
 func OmniInteractionURL(baseURL, interactionID string) string {
 	return fmt.Sprintf("%s/%s/interactions/%s", strings.TrimRight(baseURL, "/"), OmniUpstreamAPIVersion, interactionID)
 }

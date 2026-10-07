@@ -377,6 +377,8 @@ func TokenAuth() func(c *gin.Context) {
 		if c.Request.URL.Path == "/v1/models" ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1beta/openai/models") ||
+			strings.HasPrefix(c.Request.URL.Path, "/v1beta/interactions") ||
+			strings.HasPrefix(c.Request.URL.Path, "/v1beta/files/") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
 			skKey := c.Query("key")
 			if skKey != "" {

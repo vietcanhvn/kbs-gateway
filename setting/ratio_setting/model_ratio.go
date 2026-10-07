@@ -301,6 +301,10 @@ var defaultModelPrice = map[string]float64{
 	"veo-3.0-fast-generate-001":      0.15,
 	"veo-3.1-generate-preview":       0.4,
 	"veo-3.1-fast-generate-preview":  0.15,
+	// Gemini Omni Flash: USD mỗi giây video ở 720p (giá niêm yết Google);
+	// độ phân giải khác nhân hệ số trong relay/channel/task/gemini/omni.go.
+	"gemini-omni-1.1-flash":     0.1,
+	"gemini-omni-flash-preview": 0.1,
 }
 
 var defaultAudioRatio = map[string]float64{

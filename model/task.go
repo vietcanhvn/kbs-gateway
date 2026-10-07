@@ -445,6 +445,29 @@ func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
 	return result.RowsAffected > 0, nil
 }
 
+// UpdateProgressCAS đổi progress from → to chỉ khi dòng vẫn đang ở from (CAS).
+// Dùng cho quyết toán chỉ được chạy một lần (ví dụ Gemini Omni trả lại tiền
+// khi biết thời lượng thật); trả true nếu lời gọi này thắng.
+func (t *Task) UpdateProgressCAS(from, to string) (bool, error) {
+	result := DB.Model(&Task{}).Where("id = ? AND progress = ?", t.ID, from).Update("progress", to)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected > 0 {
+		t.Progress = to
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// GetRecentUserTasksByPlatform trả các task mới nhất của người dùng trên một
+// nền tảng kể từ mốc submit_time, giới hạn số dòng (mới nhất trước).
+func GetRecentUserTasksByPlatform(userId int, platform constant.TaskPlatform, sinceUnix int64, limit int) ([]*Task, error) {
+	var tasks []*Task
+	err := DB.Where("user_id = ? AND platform = ? AND submit_time >= ?", userId, platform, sinceUnix).
+		Order("id desc").Limit(limit).Find(&tasks).Error
+	return tasks, err
+}
+
 // TaskBulkUpdateByID performs an unconditional bulk UPDATE by primary key IDs.
 // WARNING: This function has NO CAS (Compare-And-Swap) guard — it will overwrite
 // any concurrent status changes. DO NOT use in billing/quota lifecycle flows

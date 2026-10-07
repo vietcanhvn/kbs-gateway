@@ -5,6 +5,9 @@ type TaskPlatform string
 const (
 	TaskPlatformSuno       TaskPlatform = "suno"
 	TaskPlatformMidjourney              = "mj"
+	// TaskPlatformGeminiOmni: interaction Gemini Omni Flash (POST /v1beta/interactions),
+	// lưu để dính kênh/key, kiểm tra chủ sở hữu tệp và quyết toán tác vụ nền.
+	TaskPlatformGeminiOmni TaskPlatform = "gemini-omni"
 )
 
 const (

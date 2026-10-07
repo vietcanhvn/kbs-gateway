@@ -203,6 +203,19 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatGemini)
 		})
 	}
+
+	// Gemini Interactions API (Gemini Omni Flash video), nguyên dạng Google.
+	// Chỉ POST cần chọn kênh; GET interaction/tệp dùng lại kênh + key đã tạo nó.
+	geminiInteractionsRouter := router.Group("/v1beta")
+	geminiInteractionsRouter.Use(middleware.RouteTag("relay"))
+	geminiInteractionsRouter.Use(middleware.SystemPerformanceCheck())
+	geminiInteractionsRouter.Use(middleware.TokenAuth())
+	{
+		geminiInteractionsRouter.POST("/interactions", middleware.ModelRequestRateLimit(), middleware.Distribute(), controller.RelayGeminiInteraction)
+		geminiInteractionsRouter.GET("/interactions/:id", controller.GetGeminiInteraction)
+		// :name là "<id>" (metadata) hoặc "<id>:download" (tải video)
+		geminiInteractionsRouter.GET("/files/:name", controller.RelayGeminiFile)
+	}
 }
 
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {

@@ -22,7 +22,8 @@ Bản tiếng Anh, có bảng ánh xạ trường và danh sách API RunningHub:
 
 1. **Kênh** (làm một lần): Kênh → Thêm → loại **RunningHub**, dán API key RunningHub,
    giữ địa chỉ `https://www.runninghub.ai` (key trang Trung Quốc thì dùng
-   `https://www.runninghub.cn`). Để trống danh sách model.
+   `https://www.runninghub.cn`). Ô model bắt buộc: ghi tên model định dùng cho workflow
+   (ví dụ `rh-h3-real-skin`); không trùng tên model kênh khác đang phục vụ.
 2. **Chuẩn bị trên RunningHub**: mở workflow trong tài khoản *của mình* (workflow cộng
    đồng thì sao chép/clone về trước), bật mọi đầu vào cần dùng (không để bypass),
    **chạy thử thành công một lần rồi lưu** — API từ chối workflow chưa từng chạy (lỗi 810).

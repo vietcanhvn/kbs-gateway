@@ -7,6 +7,7 @@ package mediaworkflow
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -425,8 +426,56 @@ func suggestActiveInputs(workflow map[string]map[string]any, ids []string) []Inp
 		}
 		add(role, text.id, text.field, text.value)
 	}
-	sort.SliceStable(candidates, func(i, j int) bool { return roleOrder(candidates[i].Role) < roleOrder(candidates[j].Role) })
+	numberMediaBySlot(candidates, consumers)
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if roleOrder(candidates[i].Role) != roleOrder(candidates[j].Role) {
+			return roleOrder(candidates[i].Role) < roleOrder(candidates[j].Role)
+		}
+		return candidates[i].Index < candidates[j].Index
+	})
 	return candidates
+}
+
+var mediaSlotPattern = regexp.MustCompile(`(?:image|video|audio|ref)[a-z_.]*?(\d+)$`)
+
+// numberMediaBySlot numbers loaders of one kind by the generation input slot
+// they reach (ref_image_0, ref_image_1, image_2...) instead of by node ID, so
+// @image1 is the loader wired to the first slot. Loaders without a numbered
+// slot keep their node order after the numbered ones.
+func numberMediaBySlot(candidates []InputCandidate, consumers map[string][][2]string) {
+	for _, role := range []string{RoleImage, RoleVideo, RoleAudio} {
+		type entry struct {
+			pos, slot int
+		}
+		entries := make([]entry, 0)
+		for pos, candidate := range candidates {
+			if candidate.Role != role {
+				continue
+			}
+			slot := -1
+			for name := range downstreamInputNames(consumers, candidate.NodeID) {
+				if match := mediaSlotPattern.FindStringSubmatch(name); match != nil {
+					if value, err := strconv.Atoi(match[1]); err == nil && (slot < 0 || value < slot) {
+						slot = value
+					}
+				}
+			}
+			entries = append(entries, entry{pos: pos, slot: slot})
+		}
+		sort.SliceStable(entries, func(i, j int) bool {
+			a, b := entries[i], entries[j]
+			if (a.slot >= 0) != (b.slot >= 0) {
+				return a.slot >= 0
+			}
+			if a.slot >= 0 && a.slot != b.slot {
+				return a.slot < b.slot
+			}
+			return candidates[a.pos].Index < candidates[b.pos].Index
+		})
+		for index, item := range entries {
+			candidates[item.pos].Index = index
+		}
+	}
 }
 
 func disabledMediaInputs(editorNodes []editorNode, workflow map[string]map[string]any) []InputCandidate {

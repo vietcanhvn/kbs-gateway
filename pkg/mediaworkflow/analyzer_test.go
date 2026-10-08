@@ -164,3 +164,22 @@ func TestAnalyzeWithoutPackagesReturnsEmptyLists(t *testing.T) {
 	assert.NotNil(t, analysis.Outputs)
 	assert.NotNil(t, analysis.Nodes)
 }
+
+func TestImageInputsFollowGenerationSlotOrder(t *testing.T) {
+	api := `{
+		"49": {"class_type": "LoadImage", "inputs": {"image": "b.png"}},
+		"51": {"class_type": "LoadImage", "inputs": {"image": "a.png"}},
+		"60": {"class_type": "Text", "inputs": {"text": "hello"}},
+		"265": {"class_type": "MiniMaxH3ReferenceToVideo", "inputs": {"ref_images.ref_image_0": ["51", 0], "ref_images.ref_image_1": ["49", 0], "prompt": ["60", 0]}},
+		"264": {"class_type": "VHS_VideoCombine", "inputs": {"images": ["265", 0]}}
+	}`
+	analysis, err := Analyze([]byte(api), nil)
+	require.NoError(t, err)
+	images := map[int]string{}
+	for _, input := range analysis.Inputs {
+		if input.Role == RoleImage {
+			images[input.Index] = input.NodeID
+		}
+	}
+	assert.Equal(t, map[int]string{0: "51", 1: "49"}, images, "@image1 is the loader wired to ref_image_0")
+}

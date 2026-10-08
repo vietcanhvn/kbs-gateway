@@ -41,5 +41,11 @@ func (t PromptTemplate) Render(prompt string) string {
 	if strings.TrimSpace(t.Template) != "" {
 		prompt = strings.ReplaceAll(t.Template, "{{prompt}}", prompt)
 	}
-	return t.Prefix + prompt + t.Suffix
+	// A prompt written for the workflow already carries its trigger word
+	// (e.g. "r34l1sm"); adding the prefix again would repeat it.
+	prefix := t.Prefix
+	if trimmed := strings.TrimSpace(prefix); trimmed != "" && strings.HasPrefix(strings.TrimSpace(prompt), trimmed) {
+		prefix = ""
+	}
+	return prefix + prompt + t.Suffix
 }

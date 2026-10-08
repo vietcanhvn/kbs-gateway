@@ -110,13 +110,18 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if err != nil {
 		return nil
 	}
-	return map[string]float64{"seconds": float64(BilledSeconds(workflow.Mapping, inputs.Duration))}
+	return map[string]float64{"seconds": float64(BilledSeconds(workflow.Mapping, inputs.Duration, workflow.DefaultSeconds))}
 }
 
-// BilledSeconds is the duration actually sent to the workflow (clamped to the
-// duration input's bounds), bounded by MaxTaskDurationSeconds.
-func BilledSeconds(mapping mediaworkflow.InputMapping, requested int) int {
+// BilledSeconds is the duration actually rendered (clamped to the duration
+// input's bounds), bounded by MaxTaskDurationSeconds. A request without a
+// duration renders the workflow's own default (workflowDefault), so that is
+// what gets billed; defaultBilledSeconds is only the last resort.
+func BilledSeconds(mapping mediaworkflow.InputMapping, requested int, workflowDefault float64) int {
 	seconds := float64(requested)
+	if seconds <= 0 {
+		seconds = workflowDefault
+	}
 	if seconds <= 0 {
 		seconds = defaultBilledSeconds
 	}

@@ -26,6 +26,12 @@ func TestPromptTemplateRender(t *testing.T) {
 			prompt:   "a cat",
 			want:     "trigger\n\nsummary: a cat\nend",
 		},
+		{
+			name:     "prefix not repeated when the prompt already has it",
+			template: PromptTemplate{Prefix: "r34l1sm\n\n"},
+			prompt:   "r34l1sm\n\nsubject_definitions: ...",
+			want:     "r34l1sm\n\nsubject_definitions: ...",
+		},
 		{name: "empty prompt stays empty", template: PromptTemplate{Prefix: "trigger "}, prompt: "  ", want: "  "},
 	}
 	for _, tt := range tests {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -25,6 +26,9 @@ type Workflow struct {
 	Mapping     mediaworkflow.InputMapping
 	Template    mediaworkflow.PromptTemplate
 	OutputNodes []string
+	// DefaultSeconds is the value already set in the workflow's duration
+	// input; it is what RunningHub renders when a request sends no duration.
+	DefaultSeconds float64
 }
 
 // LoadWorkflow returns the enabled RunningHub workflow registered for a model.
@@ -61,7 +65,32 @@ func WorkflowFromRecord(record *model.MediaWorkflow) (*Workflow, error) {
 			return nil, fmt.Errorf("workflow %q output nodes: %w", record.ModelName, err)
 		}
 	}
+	workflow.DefaultSeconds = defaultDuration(record.ApiJSON, workflow.Mapping)
 	return workflow, nil
+}
+
+// defaultDuration reads the current value of the mapped duration input from
+// the stored API JSON (0 when there is none or it is not a number).
+func defaultDuration(apiJSON string, mapping mediaworkflow.InputMapping) float64 {
+	for _, binding := range mapping.Inputs {
+		if binding.Role != mediaworkflow.RoleDuration {
+			continue
+		}
+		nodes, err := mediaworkflow.ParseAPIWorkflow([]byte(apiJSON))
+		if err != nil {
+			return 0
+		}
+		inputs, _ := nodes[binding.NodeID]["inputs"].(map[string]any)
+		switch value := inputs[binding.Field].(type) {
+		case float64:
+			return value
+		case string:
+			parsed, _ := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			return parsed
+		}
+		return 0
+	}
+	return 0
 }
 
 // Inputs is a DC-Media request reduced to workflow inputs. Media entries are

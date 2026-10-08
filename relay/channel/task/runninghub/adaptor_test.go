@@ -348,3 +348,23 @@ func TestPickOutputs(t *testing.T) {
 	assert.Equal(t, "a.png", PickOutputs(outputs, mediaworkflow.KindImage, []string{"41"})[0].FileURL, "falls back to the wanted kind")
 	assert.Equal(t, "a.png", PickOutputs(outputs, mediaworkflow.KindAudio, nil)[0].FileURL, "falls back to any media file")
 }
+
+func TestBilledSecondsFallsBackToWorkflowDefault(t *testing.T) {
+	low, high := 3.0, 10.0
+	mapping := mediaworkflow.InputMapping{Inputs: []mediaworkflow.InputBinding{
+		{Role: mediaworkflow.RoleDuration, NodeID: "259", Field: "value", Min: &low, Max: &high},
+	}}
+	assert.Equal(t, 6, BilledSeconds(mapping, 6, 8))
+	assert.Equal(t, 8, BilledSeconds(mapping, 0, 8), "no duration requested: the workflow renders its own default")
+	assert.Equal(t, 10, BilledSeconds(mapping, 30, 8))
+	assert.Equal(t, defaultBilledSeconds, BilledSeconds(mapping, 0, 0))
+
+	record := &model.MediaWorkflow{
+		ModelName: "rh-test", WorkflowID: "123456",
+		ApiJSON:      `{"259":{"class_type":"PrimitiveFloat","inputs":{"value":8}}}`,
+		InputMapping: `{"inputs":[{"role":"duration","node_id":"259","field":"value"}]}`,
+	}
+	workflow, err := WorkflowFromRecord(record)
+	require.NoError(t, err)
+	assert.Equal(t, 8.0, workflow.DefaultSeconds)
+}

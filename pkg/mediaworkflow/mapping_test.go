@@ -132,3 +132,29 @@ func TestRequestRatioAndParseSize(t *testing.T) {
 	width, height = ParseSize("auto")
 	assert.Equal(t, []int{0, 0}, []int{width, height})
 }
+
+func TestUnwireUnusedMediaDisconnectsEmptySlots(t *testing.T) {
+	workflow, err := ParseAPIWorkflow([]byte(`{
+		"51": {"class_type": "LoadImage", "inputs": {"image": "a.png"}},
+		"49": {"class_type": "LoadImage", "inputs": {"image": "b.png"}},
+		"48": {"class_type": "LoadAudio", "inputs": {"audio": "c.wav"}},
+		"265": {"class_type": "MiniMaxH3ReferenceToVideo", "inputs": {
+			"ref_images.ref_image_0": ["51", 0], "ref_images.ref_image_1": ["49", 0], "ref_audios.ref_audio_0": ["48", 0]}}
+	}`))
+	require.NoError(t, err)
+	mapping := InputMapping{Inputs: []InputBinding{
+		{Role: RoleImage, Index: 0, NodeID: "51", Field: "image", Required: true},
+		{Role: RoleImage, Index: 1, NodeID: "49", Field: "image"},
+		{Role: RoleAudio, Index: 0, NodeID: "48", Field: "audio"},
+	}}
+
+	got := UnwireUnusedMedia(mapping, workflow, MediaRequest{Images: []string{"x.png"}})
+	assert.Equal(t, []NodeOverride{
+		{NodeID: "265", FieldName: "ref_audios.ref_audio_0", FieldValue: nil},
+		{NodeID: "265", FieldName: "ref_images.ref_image_1", FieldValue: nil},
+	}, got)
+
+	assert.Empty(t, UnwireUnusedMedia(mapping, workflow, MediaRequest{Images: []string{"x", "y"}, Audios: []string{"z"}}), "every slot used")
+	mapping.UnusedMedia = "keep"
+	assert.Empty(t, UnwireUnusedMedia(mapping, workflow, MediaRequest{Images: []string{"x"}}), "keep leaves sample files")
+}

@@ -45,6 +45,15 @@ Bản tiếng Anh, có bảng ánh xạ trường và danh sách API RunningHub:
    *× số giây* thì giá là giá mỗi giây.
 6. **Bật** workflow. Khi bật, tên model được thêm vào mọi kênh RunningHub.
 
+## Một workflow, nhiều ô tham chiếu
+
+Có thể mở sẵn nhiều ô ảnh / video / audio trong một workflow (mỗi ô gắn một tệp
+mẫu, chạy thành công một lần rồi **Save**). Khi yêu cầu gửi ít tệp hơn số ô, gateway
+tự rút dây các ô không dùng khỏi node chúng nối vào (gửi giá trị null qua
+nodeInfoList), nên tệp mẫu không lọt vào kết quả. Ô bắt buộc (*required*) thì không
+rút. Muốn giữ tệp mẫu của workflow cho ô trống, đặt `unused_media: "keep"` trong
+input mapping.
+
 ## Model và LoRA
 
 - Workflow chỉ dùng được tệp model mà tài khoản RunningHub sở hữu API key nạp được.

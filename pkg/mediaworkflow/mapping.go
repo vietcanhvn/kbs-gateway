@@ -18,6 +18,11 @@ type InputMapping struct {
 	Billing string `json:"billing,omitempty"`
 	// InstanceType is passed to RunningHub ("plus" = 48 GB GPU).
 	InstanceType string `json:"instance_type,omitempty"`
+	// UnusedMedia says what happens to an optional image/video/audio slot
+	// the request leaves empty. "" (default) unwires the loader from the
+	// nodes it feeds, so the sample file saved in the workflow is not used;
+	// "keep" leaves the workflow's own file in place.
+	UnusedMedia string `json:"unused_media,omitempty"`
 }
 
 // InputBinding binds one request role to one node input.
@@ -90,6 +95,45 @@ func (m InputMapping) MediaCapacity() map[string]int {
 		}
 	}
 	return capacity
+}
+
+// UnwireUnusedMedia returns overrides that disconnect the loaders of
+// optional media slots the request leaves empty: every input that links to
+// such a loader is set to null. A workflow can then expose many reference
+// slots (one RunningHub workflow ID) and still run with fewer files without
+// its saved sample files leaking into the result.
+func UnwireUnusedMedia(mapping InputMapping, workflow map[string]map[string]any, req MediaRequest) []NodeOverride {
+	if strings.EqualFold(strings.TrimSpace(mapping.UnusedMedia), "keep") || len(workflow) == 0 {
+		return nil
+	}
+	counts := map[string]int{RoleImage: len(req.Images), RoleVideo: len(req.Videos), RoleAudio: len(req.Audios)}
+	unused := map[string]bool{}
+	for _, binding := range mapping.Inputs {
+		switch binding.Role {
+		case RoleImage, RoleVideo, RoleAudio:
+			if binding.Index >= counts[binding.Role] && !binding.Required {
+				unused[binding.NodeID] = true
+			}
+		}
+	}
+	if len(unused) == 0 {
+		return nil
+	}
+	overrides := make([]NodeOverride, 0)
+	for _, id := range sortedNodeIDs(workflow) {
+		if unused[id] {
+			continue
+		}
+		inputs, _ := workflow[id]["inputs"].(map[string]any)
+		for _, field := range sortedKeys(inputs) {
+			link, ok := inputs[field].([]any)
+			if !ok || len(link) != 2 || !unused[scalarString(link[0])] {
+				continue
+			}
+			overrides = append(overrides, NodeOverride{NodeID: id, FieldName: field, FieldValue: nil})
+		}
+	}
+	return overrides
 }
 
 // Validate checks the mapping itself (not a request) and, when the workflow

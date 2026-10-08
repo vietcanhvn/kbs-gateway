@@ -29,6 +29,9 @@ type Workflow struct {
 	// DefaultSeconds is the value already set in the workflow's duration
 	// input; it is what RunningHub renders when a request sends no duration.
 	DefaultSeconds float64
+	// nodes is the stored API JSON, used to find what an unused media
+	// loader feeds so it can be unwired.
+	nodes map[string]map[string]any
 }
 
 // LoadWorkflow returns the enabled RunningHub workflow registered for a model.
@@ -65,20 +68,19 @@ func WorkflowFromRecord(record *model.MediaWorkflow) (*Workflow, error) {
 			return nil, fmt.Errorf("workflow %q output nodes: %w", record.ModelName, err)
 		}
 	}
-	workflow.DefaultSeconds = defaultDuration(record.ApiJSON, workflow.Mapping)
+	if nodes, err := mediaworkflow.ParseAPIWorkflow([]byte(record.ApiJSON)); err == nil {
+		workflow.nodes = nodes
+	}
+	workflow.DefaultSeconds = defaultDuration(workflow.nodes, workflow.Mapping)
 	return workflow, nil
 }
 
 // defaultDuration reads the current value of the mapped duration input from
-// the stored API JSON (0 when there is none or it is not a number).
-func defaultDuration(apiJSON string, mapping mediaworkflow.InputMapping) float64 {
+// the stored API JSON nodes (0 when there is none or it is not a number).
+func defaultDuration(nodes map[string]map[string]any, mapping mediaworkflow.InputMapping) float64 {
 	for _, binding := range mapping.Inputs {
 		if binding.Role != mediaworkflow.RoleDuration {
 			continue
-		}
-		nodes, err := mediaworkflow.ParseAPIWorkflow([]byte(apiJSON))
-		if err != nil {
-			return 0
 		}
 		inputs, _ := nodes[binding.NodeID]["inputs"].(map[string]any)
 		switch value := inputs[binding.Field].(type) {
@@ -165,6 +167,7 @@ func (w *Workflow) BuildTask(ctx context.Context, client *rh.Client, in Inputs, 
 	if err != nil {
 		return rh.CreateTaskRequest{}, err
 	}
+	overrides = append(overrides, mediaworkflow.UnwireUnusedMedia(w.Mapping, w.nodes, request)...)
 	nodeInfoList := make([]rh.NodeInfo, 0, len(overrides))
 	for _, override := range overrides {
 		nodeInfoList = append(nodeInfoList, rh.NodeInfo{NodeID: override.NodeID, FieldName: override.FieldName, FieldValue: override.FieldValue})

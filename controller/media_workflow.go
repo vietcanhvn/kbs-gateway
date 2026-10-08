@@ -68,6 +68,7 @@ func newMediaWorkflowView(record *model.MediaWorkflow) mediaWorkflowView {
 	if record.Analysis != "" {
 		var analysis mediaworkflow.Analysis
 		if common.UnmarshalJsonStr(record.Analysis, &analysis) == nil {
+			analysis.Normalize()
 			view.Analysis = &analysis
 		}
 	}

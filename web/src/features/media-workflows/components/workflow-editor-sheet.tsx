@@ -425,7 +425,7 @@ export function WorkflowEditorSheet(props: {
               )}
               <MappingEditor
                 mapping={mapping}
-                nodes={analysis.nodes}
+                nodes={analysis.nodes ?? []}
                 onChange={setMapping}
               />
               <div className='flex flex-col gap-1'>

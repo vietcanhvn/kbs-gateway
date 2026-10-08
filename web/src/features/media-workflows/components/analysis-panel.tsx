@@ -8,7 +8,15 @@ import type { WorkflowAnalysis } from '../types'
 
 export function AnalysisPanel(props: { analysis: WorkflowAnalysis }) {
   const { t } = useTranslation()
-  const analysis = props.analysis
+  // Older saved analyses can carry null lists (Go nil slices).
+  const analysis = {
+    ...props.analysis,
+    nodes: props.analysis.nodes ?? [],
+    models: props.analysis.models ?? [],
+    packages: props.analysis.packages ?? [],
+    inputs: props.analysis.inputs ?? [],
+    outputs: props.analysis.outputs ?? [],
+  }
   const activeModels = analysis.models.filter((item) => item.active)
   const disabledModels = analysis.models.filter((item) => !item.active)
   // filter() returns a new array, so sorting it does not touch the prop.

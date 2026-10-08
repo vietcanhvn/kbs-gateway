@@ -153,3 +153,14 @@ func TestAnalyzeRealWorkflowExport(t *testing.T) {
 	assert.Len(t, disabled[RoleAudio], 3)
 	assert.Equal(t, []string{"264"}, SuggestOutputNodes(analysis))
 }
+
+func TestAnalyzeWithoutPackagesReturnsEmptyLists(t *testing.T) {
+	analysis, err := Analyze(readFixture(t, "ref_video_api.json"), nil)
+	require.NoError(t, err)
+	// The admin page reads these as arrays; nil would be sent as null.
+	assert.NotNil(t, analysis.Packages)
+	assert.NotNil(t, analysis.Models)
+	assert.NotNil(t, analysis.Inputs)
+	assert.NotNil(t, analysis.Outputs)
+	assert.NotNil(t, analysis.Nodes)
+}

@@ -267,7 +267,29 @@ func Analyze(apiJSON, editorJSON []byte) (*Analysis, error) {
 	if hasPackage(analysis.Packages, "comfyui-workflow-encrypt") {
 		analysis.Warnings = append(analysis.Warnings, "some nodes are packed by RunningHub's comfyui-workflow-encrypt; they run on RunningHub but their source package is not named in the export")
 	}
+	analysis.Normalize()
 	return analysis, nil
+}
+
+// Normalize turns nil lists into empty ones so the JSON never carries
+// null where the admin page expects an array (a workflow without custom
+// node packages used to crash the edit sheet).
+func (a *Analysis) Normalize() {
+	if a.Nodes == nil {
+		a.Nodes = []NodeInfo{}
+	}
+	if a.Models == nil {
+		a.Models = []ModelFile{}
+	}
+	if a.Packages == nil {
+		a.Packages = []PackageInfo{}
+	}
+	if a.Inputs == nil {
+		a.Inputs = []InputCandidate{}
+	}
+	if a.Outputs == nil {
+		a.Outputs = []OutputCandidate{}
+	}
 }
 
 // SuggestMapping turns the active input candidates into an input mapping the

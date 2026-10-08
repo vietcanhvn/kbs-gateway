@@ -444,6 +444,10 @@ type mediaWorkflowTestRequest struct {
 	Audios    []string `json:"audios"`
 	Duration  int      `json:"duration"`
 	Ratio     string   `json:"ratio"`
+	// ExtraNodes are appended to the generated nodeInfoList as-is, so an
+	// admin can try overrides the mapping cannot express yet (for example
+	// unwiring an unused reference slot).
+	ExtraNodes []rh.NodeInfo `json:"extra_nodes"`
 }
 
 // TestMediaWorkflow submits one real RunningHub task for a saved workflow
@@ -487,6 +491,7 @@ func TestMediaWorkflow(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	task.NodeInfoList = append(task.NodeInfoList, req.ExtraNodes...)
 	created, err := client.CreateTask(ctx, task)
 	if err != nil {
 		common.ApiError(c, err)

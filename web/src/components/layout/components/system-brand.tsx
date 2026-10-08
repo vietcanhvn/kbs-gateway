@@ -27,6 +27,7 @@ import {
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { cn } from '@/lib/utils'
+import { SiteName } from './site-name'
 
 type SystemBrandProps = {
   defaultName?: string
@@ -72,7 +73,7 @@ export function SystemBrand(props: SystemBrandProps) {
             className='size-full rounded-md object-cover'
           />
         </div>
-        <span className='max-w-[12rem] truncate'>{name}</span>
+        <SiteName name={name} className='max-w-[12rem] truncate' />
       </Link>
     )
   }
@@ -93,7 +94,7 @@ export function SystemBrand(props: SystemBrandProps) {
             />
           </div>
           <div className='grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden'>
-            <span className='truncate font-semibold'>{name}</span>
+            <SiteName name={name} className='truncate font-semibold' />
             <span className='truncate text-xs'>{version}</span>
           </div>
         </SidebarMenuButton>

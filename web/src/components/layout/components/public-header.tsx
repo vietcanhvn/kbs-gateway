@@ -36,6 +36,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
+import { SiteName } from './site-name'
 
 const AUTH_PROMPT_SECONDS = 5
 
@@ -210,7 +211,11 @@ export function PublicHeader(props: PublicHeaderProps) {
                 )}
               </div>
               <span className='text-sm font-semibold tracking-tight'>
-                {loading ? <Skeleton className='h-4 w-16' /> : displaySiteName}
+                {loading ? (
+                  <Skeleton className='h-4 w-16' />
+                ) : (
+                  <SiteName name={displaySiteName} className='text-base' />
+                )}
               </span>
             </Link>
 

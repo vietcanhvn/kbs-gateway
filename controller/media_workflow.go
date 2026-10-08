@@ -413,21 +413,26 @@ func runningHubClientForAdmin(channelID int) (*rh.Client, *model.Channel, error)
 }
 
 // GetRunningHubAccount shows the RunningHub balance/queue of a channel key.
+// A missing channel or an unreachable account is reported in the data
+// (configured=false / error) rather than as a failed request, since the
+// page shows it as a status line.
 func GetRunningHubAccount(c *gin.Context) {
 	channelID, _ := strconv.Atoi(c.Query("channel_id"))
 	client, channel, err := runningHubClientForAdmin(channelID)
 	if err != nil {
-		common.ApiError(c, err)
+		common.ApiSuccess(c, gin.H{"configured": false, "error": err.Error()})
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 	defer cancel()
+	response := gin.H{"configured": true, "channel_id": channel.Id, "channel_name": channel.Name}
 	account, err := client.Account(ctx)
 	if err != nil {
-		common.ApiError(c, err)
-		return
+		response["error"] = err.Error()
+	} else {
+		response["account"] = account
 	}
-	common.ApiSuccess(c, gin.H{"channel_id": channel.Id, "channel_name": channel.Name, "account": account})
+	common.ApiSuccess(c, response)
 }
 
 type mediaWorkflowTestRequest struct {

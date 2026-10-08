@@ -8,6 +8,7 @@
 | 渠道 | 适配器入口 | 当前状态 | 建议贡献方向 |
 |---|---|---|---|
 | ComfyUI | `relay/channel/task/comfyui/` | 已进行 DC-Media 本地视频适配 | 补充更多可复用 Workflow、素材节点和端到端样例 |
+| RunningHub | `relay/channel/task/runninghub/`、`relay/channel/runninghub/`、`pkg/mediaworkflow/` | Workflow 注册表（模型 → RunningHub workflows）在 runninghub.ai 运行 ComfyUI workflow，支持视频任务与图片生成；已用模拟 API 测试，尚无真实密钥验证（[说明](runninghub.md)） | 补真实端到端证据；为同一注册表实现 `comfyui` 执行器 |
 | MiniMax / Hailuo | `relay/channel/task/hailuo/` | 已适配 H3 等视频任务，需按模型持续验证 | 补模型限制、首尾帧及参考素材契约测试 |
 | VolcEngine / DoubaoVideo | `relay/channel/task/doubao/` | 已有 DC-Media 视频转换 | 按官方模型补齐能力边界和错误映射 |
 | fal.ai | `relay/channel/fal/`、`relay/channel/task/fal/` | 已注册同步媒体和异步任务 | 增加模型级 fixture 和真实调用证据 |

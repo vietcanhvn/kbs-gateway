@@ -11,6 +11,7 @@ capabilities. This table records human verification and known gaps.
 | Channel | Adapter entry | Current status | Suggested contribution |
 |---|---|---|---|
 | ComfyUI | `relay/channel/task/comfyui/` | DC-Media local video adaptation exists | Add reusable workflows, media-node coverage, and end-to-end examples |
+| RunningHub | `relay/channel/task/runninghub/`, `relay/channel/runninghub/`, `pkg/mediaworkflow/` | Workflow registry (Models → RunningHub workflows) runs ComfyUI workflows on runninghub.ai for video tasks and image generation; tested against a mock API, not yet against a real key ([guide](runninghub.md)) | Real end-to-end evidence; a `comfyui` executor for the same registry |
 | MiniMax / Hailuo | `relay/channel/task/hailuo/` | H3 and related video work exists; verify per model | Add model limits, frame-role, and reference-media contract tests |
 | VolcEngine / DoubaoVideo | `relay/channel/task/doubao/` | DC-Media video conversion exists | Document model boundaries and provider error mapping |
 | fal.ai | `relay/channel/fal/`, `relay/channel/task/fal/` | Sync media and async task adapters are registered | Add model fixtures and sanitized real-call evidence |

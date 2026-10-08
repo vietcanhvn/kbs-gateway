@@ -198,6 +198,18 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       other: 'Configure exported API Format workflows in channel settings',
     },
   },
+  64: {
+    id: 64,
+    name: CHANNEL_TYPES[64],
+    icon: 'openai',
+    defaultBaseUrl: 'https://www.runninghub.ai',
+    hints: {
+      baseUrl: 'RunningHub API host (www.runninghub.ai or www.runninghub.cn)',
+      key: 'RunningHub API key',
+      models:
+        'Added automatically when a RunningHub workflow is enabled (Models → RunningHub workflows)',
+    },
+  },
 }
 
 /**

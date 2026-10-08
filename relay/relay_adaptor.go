@@ -32,6 +32,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/palm"
 	"github.com/QuantumNous/new-api/relay/channel/perplexity"
 	"github.com/QuantumNous/new-api/relay/channel/replicate"
+	"github.com/QuantumNous/new-api/relay/channel/runninghub"
 	"github.com/QuantumNous/new-api/relay/channel/siliconflow"
 	"github.com/QuantumNous/new-api/relay/channel/sub2api"
 	"github.com/QuantumNous/new-api/relay/channel/submodel"
@@ -43,6 +44,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
+	taskrunninghub "github.com/QuantumNous/new-api/relay/channel/task/runninghub"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
@@ -137,6 +139,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &sub2api.Adaptor{}
 	case constant.APITypeNewAPI:
 		return &newapi.Adaptor{}
+	case constant.APITypeRunningHub:
+		return &runninghub.Adaptor{}
 	}
 	return nil
 }
@@ -182,6 +186,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskfal.TaskAdaptor{}
 		case constant.ChannelTypeComfyUI:
 			return &taskcomfyui.TaskAdaptor{}
+		case constant.ChannelTypeRunningHub:
+			return &taskrunninghub.TaskAdaptor{}
 		}
 	}
 	return nil

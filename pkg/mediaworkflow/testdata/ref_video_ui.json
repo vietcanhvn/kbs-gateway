@@ -1,0 +1,275 @@
+{
+ "id": "synthetic",
+ "nodes": [
+  {
+   "id": 10,
+   "type": "UNETLoader",
+   "mode": 0,
+   "title": "Load Diffusion Model",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 11,
+   "type": "LoraLoaderModelOnly",
+   "mode": 0,
+   "title": "Load LoRA",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 12,
+   "type": "CLIPLoader",
+   "mode": 0,
+   "title": "Load CLIP",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 13,
+   "type": "VAELoader",
+   "mode": 0,
+   "title": "Load VAE",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 20,
+   "type": "LoadImage",
+   "mode": 0,
+   "title": "Load Image",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 21,
+   "type": "Text",
+   "mode": 0,
+   "title": "Text",
+   "properties": {
+    "Node name for S&R": "x",
+    "ver": "abc123"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 22,
+   "type": "CLIPTextEncode",
+   "mode": 0,
+   "title": "Negative",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 23,
+   "type": "PrimitiveFloat",
+   "mode": 0,
+   "title": "Video Duration (sec)",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 24,
+   "type": "ResolutionSelector",
+   "mode": 0,
+   "title": "Resolution",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 25,
+   "type": "RandomNoise",
+   "mode": 0,
+   "title": "RandomNoise",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 30,
+   "type": "ExampleReferenceToVideo",
+   "mode": 0,
+   "title": "Reference to Video",
+   "properties": {
+    "Node name for S&R": "x",
+    "aux_id": "example/ComfyUI-ExampleVideo"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 31,
+   "type": "SamplerCustomAdvanced",
+   "mode": 0,
+   "title": "Sampler",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 32,
+   "type": "VAEDecode",
+   "mode": 0,
+   "title": "VAE Decode",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 40,
+   "type": "VHS_VideoCombine",
+   "mode": 0,
+   "title": "Video Combine",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfyui-workflow-encrypt"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 41,
+   "type": "PreviewImage",
+   "mode": 0,
+   "title": "Preview Image",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 50,
+   "type": "SetNode",
+   "mode": 0,
+   "properties": {
+    "Node name for S&R": "x",
+    "aux_id": "kijai/ComfyUI-KJNodes"
+   },
+   "widgets_values": [
+    "Image 1"
+   ]
+  },
+  {
+   "id": 51,
+   "type": "Note",
+   "mode": 0,
+   "properties": {},
+   "widgets_values": [
+    "notes"
+   ]
+  },
+  {
+   "id": 60,
+   "type": "LoadImage",
+   "mode": 4,
+   "title": "Load Image 2",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": [
+    "None",
+    "image"
+   ]
+  },
+  {
+   "id": 61,
+   "type": "LoadImage",
+   "mode": 4,
+   "title": "Load Image 3",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": [
+    "None",
+    "image"
+   ]
+  },
+  {
+   "id": 62,
+   "type": "VHS_LoadVideo",
+   "mode": 4,
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfyui-workflow-encrypt"
+   },
+   "widgets_values": {
+    "video": "",
+    "force_rate": 0
+   }
+  },
+  {
+   "id": 63,
+   "type": "LoadAudio",
+   "mode": 4,
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfy-core"
+   },
+   "widgets_values": [
+    "None",
+    null,
+    null
+   ]
+  },
+  {
+   "id": 64,
+   "type": "LatentUpscaler",
+   "mode": 4,
+   "properties": {
+    "Node name for S&R": "x",
+    "aux_id": "example/ComfyUI-Upscaler"
+   },
+   "widgets_values": [
+    "example_upscaler.safetensors",
+    2
+   ]
+  },
+  {
+   "id": 65,
+   "type": "VHS_VideoCombine",
+   "mode": 2,
+   "title": "Second pass",
+   "properties": {
+    "Node name for S&R": "x",
+    "cnr_id": "comfyui-workflow-encrypt"
+   },
+   "widgets_values": {
+    "frame_rate": 24
+   }
+  }
+ ],
+ "links": [],
+ "groups": [],
+ "version": 0.4
+}

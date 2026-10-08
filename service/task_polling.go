@@ -653,6 +653,9 @@ func redactVideoResponseBody(body []byte) []byte {
 		delete(m, "base_url")
 		delete(m, "url")
 	}
+	if _, isRunningHubResult := m["rh_task_id"]; isRunningHubResult {
+		delete(m, "url")
+	}
 	resp, _ := m["response"].(map[string]any)
 	if resp != nil {
 		delete(resp, "bytesBase64Encoded")

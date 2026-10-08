@@ -350,6 +350,22 @@ func SetApiRouter(router *gin.Engine) {
 			vendorRoute.DELETE("/:id", controller.DeleteVendorMeta)
 		}
 
+		mediaWorkflowRoute := apiRouter.Group("/media_workflow")
+		mediaWorkflowRoute.Use(middleware.AdminAuth())
+		{
+			mediaWorkflowRoute.GET("/", controller.ListMediaWorkflows)
+			mediaWorkflowRoute.POST("/", controller.CreateMediaWorkflow)
+			mediaWorkflowRoute.PUT("/", controller.UpdateMediaWorkflow)
+			mediaWorkflowRoute.POST("/analyze", controller.AnalyzeMediaWorkflow)
+			mediaWorkflowRoute.POST("/fetch", controller.FetchMediaWorkflow)
+			mediaWorkflowRoute.GET("/account", controller.GetRunningHubAccount)
+			mediaWorkflowRoute.GET("/:id", controller.GetMediaWorkflow)
+			mediaWorkflowRoute.DELETE("/:id", controller.DeleteMediaWorkflow)
+			mediaWorkflowRoute.POST("/:id/enable", controller.EnableMediaWorkflow)
+			mediaWorkflowRoute.POST("/:id/test", controller.TestMediaWorkflow)
+			mediaWorkflowRoute.GET("/:id/test", controller.GetMediaWorkflowTestStatus)
+		}
+
 		modelsRoute := apiRouter.Group("/models")
 		modelsRoute.Use(middleware.AdminAuth())
 		{

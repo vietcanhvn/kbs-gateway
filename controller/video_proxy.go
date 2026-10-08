@@ -157,6 +157,10 @@ func videoProxy(c *gin.Context, public bool) {
 			req.Header.Set("Authorization", "Bearer "+channel.Key)
 			req.Header.Set("X-API-Key", channel.Key)
 		}
+	case constant.ChannelTypeRunningHub:
+		// RunningHub result links are public CDN URLs that may expire; the
+		// gateway only exposes its own proxy URL and streams from here.
+		videoURL = strings.TrimSpace(task.PrivateData.UpstreamResultURL)
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()

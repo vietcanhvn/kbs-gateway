@@ -293,6 +293,7 @@ func migrateDB() error {
 		&SystemTaskLock{},
 		&CasbinRule{},
 		&AuthzRole{},
+		&MediaWorkflow{},
 	)
 	if err != nil {
 		return err
@@ -339,6 +340,7 @@ func migrateDBFast() error {
 		{&ReferralCommission{}, "ReferralCommission"},
 		{&QuotaData{}, "QuotaData"},
 		{&Task{}, "Task"},
+		{&MediaWorkflow{}, "MediaWorkflow"},
 		{&Model{}, "Model"},
 		{&Vendor{}, "Vendor"},
 		{&PrefillGroup{}, "PrefillGroup"},

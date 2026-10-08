@@ -599,8 +599,9 @@ func taskResponseResultURL(task *model.Task) string {
 	if task == nil {
 		return ""
 	}
-	if task.Platform == constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeComfyUI)) &&
-		strings.TrimSpace(task.PrivateData.UpstreamResultURL) != "" {
+	proxiedPlatform := task.Platform == constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeComfyUI)) ||
+		task.Platform == constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeRunningHub))
+	if proxiedPlatform && strings.TrimSpace(task.PrivateData.UpstreamResultURL) != "" {
 		return taskcommon.BuildPublicProxyURL(task.TaskID)
 	}
 	return strings.TrimSpace(task.GetResultURL())

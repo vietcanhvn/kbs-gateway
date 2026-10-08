@@ -1,0 +1,17 @@
+{
+  "10": {"class_type": "UNETLoader", "inputs": {"unet_name": "example_video_model_int8.safetensors", "weight_dtype": "default"}, "_meta": {"title": "Load Diffusion Model"}},
+  "11": {"class_type": "LoraLoaderModelOnly", "inputs": {"lora_name": "example_style_lora.safetensors", "strength_model": 0.8, "model": ["10", 0]}, "_meta": {"title": "Load LoRA"}},
+  "12": {"class_type": "CLIPLoader", "inputs": {"clip_name": "example_text_encoder.safetensors", "type": "default", "device": "default"}, "_meta": {"title": "Load CLIP"}},
+  "13": {"class_type": "VAELoader", "inputs": {"vae_name": "example_vae.safetensors"}, "_meta": {"title": "Load VAE"}},
+  "20": {"class_type": "LoadImage", "inputs": {"image": "sample.png"}, "_meta": {"title": "Load Image"}},
+  "21": {"class_type": "Text", "inputs": {"text": "A person walks along a quiet beach at sunset."}, "_meta": {"title": "Text"}},
+  "22": {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry, low quality", "clip": ["12", 0]}, "_meta": {"title": "Negative"}},
+  "23": {"class_type": "PrimitiveFloat", "inputs": {"value": 8}, "_meta": {"title": "Video Duration (sec)"}},
+  "24": {"class_type": "ResolutionSelector", "inputs": {"aspect_ratio": "9:16 (Portrait Widescreen)", "megapixels": 1, "multiple": 24}, "_meta": {"title": "Resolution"}},
+  "25": {"class_type": "RandomNoise", "inputs": {"noise_seed": 12345}, "_meta": {"title": "RandomNoise"}},
+  "30": {"class_type": "ExampleReferenceToVideo", "inputs": {"prompt": ["21", 0], "negative": ["22", 0], "width": ["24", 0], "height": ["24", 1], "length": ["23", 0], "clip": ["12", 0], "vae": ["13", 0], "ref_image_0": ["20", 0]}, "_meta": {"title": "Reference to Video"}},
+  "31": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["25", 0], "model": ["11", 0], "latent_image": ["30", 1]}, "_meta": {"title": "Sampler"}},
+  "32": {"class_type": "VAEDecode", "inputs": {"samples": ["31", 0], "vae": ["13", 0]}, "_meta": {"title": "VAE Decode"}},
+  "40": {"class_type": "VHS_VideoCombine", "inputs": {"frame_rate": 24, "format": "video/h264-mp4", "save_output": true, "images": ["32", 0]}, "_meta": {"title": "Video Combine"}},
+  "41": {"class_type": "PreviewImage", "inputs": {"images": ["20", 0]}, "_meta": {"title": "Preview Image"}}
+}

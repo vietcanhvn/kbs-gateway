@@ -24,6 +24,27 @@ import type { PricingModel } from '../types'
 // ----------------------------------------------------------------------------
 
 /**
+ * Human-friendly model name: the admin-configured display name, falling back
+ * to the model code (`model_name`). The code is still what API callers use.
+ */
+export function getModelDisplayName(
+  model: Pick<PricingModel, 'model_name' | 'display_name'>
+): string {
+  return model.display_name?.trim() || model.model_name || ''
+}
+
+/**
+ * Whether the model has a display name different from its code, i.e. the
+ * code should be shown as a secondary label.
+ */
+export function hasDistinctDisplayName(
+  model: Pick<PricingModel, 'model_name' | 'display_name'>
+): boolean {
+  const displayName = model.display_name?.trim()
+  return !!displayName && displayName !== model.model_name
+}
+
+/**
  * Get available groups for a model
  */
 export function getAvailableGroups(

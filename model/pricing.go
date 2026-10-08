@@ -17,6 +17,7 @@ import (
 
 type Pricing struct {
 	ModelName              string                  `json:"model_name"`
+	DisplayName            string                  `json:"display_name,omitempty"`
 	Description            string                  `json:"description,omitempty"`
 	Icon                   string                  `json:"icon,omitempty"`
 	Tags                   string                  `json:"tags,omitempty"`
@@ -367,6 +368,10 @@ func updatePricing() {
 			// 若模型被禁用(status!=1)，则直接跳过，不返回给前端
 			if meta.Status != 1 {
 				continue
+			}
+			// 显示名称只对精确匹配的元数据生效，规则匹配（前缀/后缀/包含）会命中多个模型，共用一个名称会造成混淆
+			if meta.NameRule == NameRuleExact && meta.ModelName == model {
+				pricing.DisplayName = strings.TrimSpace(meta.DisplayName)
 			}
 			pricing.Description = meta.Description
 			pricing.Icon = meta.Icon

@@ -292,3 +292,72 @@ func TestCacheUpdateChannelSyncsAdvancedCustomConfig(t *testing.T) {
 
 	assert.Nil(t, channel2advancedCustomConfig[401])
 }
+
+func TestPricingCarriesDisplayNameFromExactModelMeta(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+
+	insertPricingEndpointChannel(t, 501, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	insertPricingEndpointAbility(t, 501, "gemini-nano-banana-2.1")
+	insertPricingEndpointAbility(t, 501, "byteplus-seedance-2.0")
+	insertPricingEndpointAbility(t, 501, "byteplus-seedance-2.0-fast")
+	insertPricingEndpointAbility(t, 501, "plain-model")
+	require.NoError(t, DB.Create(&Model{
+		ModelName:   "gemini-nano-banana-2.1",
+		DisplayName: "  Nano Banana 2.1  ",
+		Status:      1,
+		NameRule:    NameRuleExact,
+	}).Error)
+	require.NoError(t, DB.Create(&Model{
+		ModelName:   "byteplus-seedance",
+		DisplayName: "Seedance",
+		Description: "Seedance family",
+		Status:      1,
+		NameRule:    NameRulePrefix,
+	}).Error)
+
+	InitChannelCache()
+	byModel := make(map[string]Pricing)
+	for _, p := range GetPricing() {
+		byModel[p.ModelName] = p
+	}
+
+	assert.Equal(t, "Nano Banana 2.1", byModel["gemini-nano-banana-2.1"].DisplayName)
+	// 规则匹配的元数据仍提供描述，但不把同一个显示名称套到多个模型上
+	assert.Equal(t, "Seedance family", byModel["byteplus-seedance-2.0"].Description)
+	assert.Empty(t, byModel["byteplus-seedance-2.0"].DisplayName)
+	assert.Empty(t, byModel["byteplus-seedance-2.0-fast"].DisplayName)
+	assert.Empty(t, byModel["plain-model"].DisplayName)
+}
+
+func TestModelMetaUpdatePersistsDisplayName(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+
+	m := &Model{ModelName: "byteplus-seedance-2.0", DisplayName: "Seedance 2.0", Status: 1}
+	require.NoError(t, m.Insert())
+
+	var stored Model
+	require.NoError(t, DB.First(&stored, m.Id).Error)
+	assert.Equal(t, "Seedance 2.0", stored.DisplayName)
+
+	stored.DisplayName = "Seedance 2.0 Pro"
+	require.NoError(t, stored.Update())
+	var updated Model
+	require.NoError(t, DB.First(&updated, m.Id).Error)
+	assert.Equal(t, "Seedance 2.0 Pro", updated.DisplayName)
+
+	updated.DisplayName = ""
+	require.NoError(t, updated.Update())
+	var cleared Model
+	require.NoError(t, DB.First(&cleared, m.Id).Error)
+	assert.Empty(t, cleared.DisplayName)
+
+	found, _, err := SearchModels("Seedance 2", "", "", "", 0, 10)
+	require.NoError(t, err)
+	assert.Empty(t, found)
+	cleared.DisplayName = "Seedance 2.0"
+	require.NoError(t, cleared.Update())
+	found, _, err = SearchModels("Seedance 2", "", "", "", 0, 10)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, "byteplus-seedance-2.0", found[0].ModelName)
+}

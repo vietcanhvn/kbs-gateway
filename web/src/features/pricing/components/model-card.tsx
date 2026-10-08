@@ -31,7 +31,11 @@ import {
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
 import { localizeModelDescription } from '../lib/localized-description'
-import { isTokenBasedModel } from '../lib/model-helpers'
+import {
+  getModelDisplayName,
+  hasDistinctDisplayName,
+  isTokenBasedModel,
+} from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
 import { ModelBillingModeBadge } from './model-billing-mode-badge'
@@ -62,7 +66,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const endpoints = props.model.supported_endpoint_types || []
   const modelIconKey = props.model.icon || props.model.vendor_icon
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 28) : null
-  const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
+  const displayName = getModelDisplayName(props.model)
+  const showCode = hasDistinctDisplayName(props.model)
+  const initial = displayName.charAt(0).toUpperCase() || '?'
   const isDynamicPricing =
     props.model.billing_mode === 'tiered_expr' &&
     Boolean(props.model.billing_expr)
@@ -212,9 +218,23 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             )}
           </div>
           <div className='min-w-0'>
-            <h3 className='text-foreground truncate font-mono text-[15px] leading-tight font-bold'>
-              {props.model.model_name}
+            <h3
+              className={cn(
+                'text-foreground truncate text-[15px] leading-tight font-bold',
+                !showCode && 'font-mono'
+              )}
+              title={displayName}
+            >
+              {displayName}
             </h3>
+            {showCode && (
+              <code
+                className='text-muted-foreground mt-0.5 block truncate font-mono text-[11px] leading-tight'
+                title={props.model.model_name}
+              >
+                {props.model.model_name}
+              </code>
+            )}
             <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm sm:mt-1 sm:gap-x-3'>
               {priceSummary}
             </div>

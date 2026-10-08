@@ -30,6 +30,8 @@ export type PricingVendor = {
 export type PricingModel = {
   id: number
   model_name: string
+  /** Optional human-friendly name; `model_name` stays the API code */
+  display_name?: string
   description?: string
   icon?: string
   vendor_id?: number

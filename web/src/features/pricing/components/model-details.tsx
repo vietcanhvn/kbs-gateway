@@ -68,7 +68,12 @@ import {
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
 import { localizeModelDescription } from '../lib/localized-description'
-import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
+import {
+  getAvailableGroups,
+  getModelDisplayName,
+  hasDistinctDisplayName,
+  isTokenBasedModel,
+} from '../lib/model-helpers'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
 import type {
   ModelCapability,
@@ -529,6 +534,18 @@ function ModelHeader(props: { model: PricingModel }) {
   const model = props.model
   const modelIconKey = model.icon || model.vendor_icon
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 20) : null
+  const displayName = getModelDisplayName(model)
+  const showCode = hasDistinctDisplayName(model)
+  const copyButton = (
+    <CopyButton
+      value={model.model_name || ''}
+      className='size-6'
+      iconClassName='size-3'
+      tooltip={t('Copy model name')}
+      successTooltip={t('Copied!')}
+      aria-label={t('Copy model name')}
+    />
+  )
   const description =
     localizeModelDescription(model.description, i18n.language) ||
     model.vendor_description ||
@@ -538,18 +555,24 @@ function ModelHeader(props: { model: PricingModel }) {
     <header className='pb-4'>
       <div className='flex items-center gap-2.5'>
         {modelIcon}
-        <h1 className='font-mono text-xl font-bold tracking-tight sm:text-2xl'>
-          {model.model_name}
+        <h1
+          className={cn(
+            'text-xl font-bold tracking-tight sm:text-2xl',
+            !showCode && 'font-mono'
+          )}
+        >
+          {displayName}
         </h1>
-        <CopyButton
-          value={model.model_name || ''}
-          className='size-6'
-          iconClassName='size-3'
-          tooltip={t('Copy model name')}
-          successTooltip={t('Copied!')}
-          aria-label={t('Copy model name')}
-        />
+        {!showCode && copyButton}
       </div>
+      {showCode && (
+        <div className='mt-1 flex items-center gap-1.5'>
+          <code className='bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-xs break-all'>
+            {model.model_name}
+          </code>
+          {copyButton}
+        </div>
+      )}
       <div className='mt-1 flex flex-wrap items-center gap-1.5 text-xs'>
         {model.vendor_name && (
           <span className='text-muted-foreground'>{model.vendor_name}</span>
@@ -1237,7 +1260,7 @@ export function ModelDetailsDrawer(props: ModelDetailsDrawerProps) {
         )}
       >
         <SheetHeader className='sr-only'>
-          <SheetTitle>{props.model.model_name}</SheetTitle>
+          <SheetTitle>{getModelDisplayName(props.model)}</SheetTitle>
           <SheetDescription>{t('Model details')}</SheetDescription>
         </SheetHeader>
         <div className='flex-1 overflow-y-auto px-4 pt-11 pb-5 sm:px-6 sm:pt-12 sm:pb-6'>

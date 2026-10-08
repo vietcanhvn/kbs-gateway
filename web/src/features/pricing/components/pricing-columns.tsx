@@ -27,6 +27,7 @@ import {
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { getLobeIcon } from '@/lib/lobe-icon'
+import { cn } from '@/lib/utils'
 
 import { DEFAULT_TOKEN_UNIT } from '../constants'
 import {
@@ -34,7 +35,11 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
-import { isTokenBasedModel } from '../lib/model-helpers'
+import {
+  getModelDisplayName,
+  hasDistinctDisplayName,
+  isTokenBasedModel,
+} from '../lib/model-helpers'
 import {
   formatPrice,
   formatRequestPrice,
@@ -72,7 +77,8 @@ export function usePricingColumns(
   return [
     // Model column
     {
-      accessorKey: 'model_name',
+      id: 'model_name',
+      accessorFn: (model) => getModelDisplayName(model),
       meta: { label: t('Model') },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('Model')} />
@@ -85,8 +91,14 @@ export function usePricingColumns(
         return (
           <div className='flex max-w-full min-w-0 items-center gap-2'>
             {modelIcon}
-            <span className='truncate font-mono text-sm font-medium'>
-              {model.model_name}
+            <span
+              className={cn(
+                'truncate text-sm font-medium',
+                !hasDistinctDisplayName(model) && 'font-mono'
+              )}
+              title={model.model_name}
+            >
+              {getModelDisplayName(model)}
             </span>
           </div>
         )

@@ -158,3 +158,36 @@ func TestUnwireUnusedMediaDisconnectsEmptySlots(t *testing.T) {
 	mapping.UnusedMedia = "keep"
 	assert.Empty(t, UnwireUnusedMedia(mapping, workflow, MediaRequest{Images: []string{"x"}}), "keep leaves sample files")
 }
+
+func TestUnwireUnusedMediaDisconnectsAnEmptyLastFrame(t *testing.T) {
+	workflow, err := ParseAPIWorkflow([]byte(`{
+		"9": {"class_type": "LoadImage", "inputs": {"image": "first.png"}},
+		"54": {"class_type": "LoadImage", "inputs": {"image": "last.png"}},
+		"16": {"class_type": "MiniMaxH3ImageToVideo", "inputs": {"first_frame": ["9", 0], "last_frame": ["54", 0]}}
+	}`))
+	require.NoError(t, err)
+	mapping := InputMapping{Inputs: []InputBinding{
+		{Role: RoleImage, Index: 0, NodeID: "9", Field: "image", Required: true},
+		{Role: RoleLastFrame, NodeID: "54", Field: "image"},
+	}}
+	assert.Equal(t, []NodeOverride{{NodeID: "16", FieldName: "last_frame", FieldValue: nil}},
+		UnwireUnusedMedia(mapping, workflow, MediaRequest{Images: []string{"x"}}))
+	assert.Empty(t, UnwireUnusedMedia(mapping, workflow, MediaRequest{Images: []string{"x"}, LastFrame: "y"}))
+}
+
+func TestUnwireUnusedMediaFollowsResizeHelpers(t *testing.T) {
+	workflow, err := ParseAPIWorkflow([]byte(`{
+		"9": {"class_type": "LoadImage", "inputs": {"image": "first.png"}},
+		"15": {"class_type": "ResolutionSelector", "inputs": {"aspect_ratio": "16:9"}},
+		"54": {"class_type": "LoadImage", "inputs": {"image": "last.png"}},
+		"55": {"class_type": "ImageResizeKJv2", "inputs": {"image": ["54", 0], "width": ["15", 0], "height": ["15", 1]}},
+		"16": {"class_type": "MiniMaxH3ImageToVideo", "inputs": {"first_frame": ["9", 0], "last_frame": ["55", 0], "width": ["15", 0]}}
+	}`))
+	require.NoError(t, err)
+	mapping := InputMapping{Inputs: []InputBinding{
+		{Role: RoleImage, Index: 0, NodeID: "9", Field: "image", Required: true},
+		{Role: RoleLastFrame, NodeID: "54", Field: "image"},
+	}}
+	assert.Equal(t, []NodeOverride{{NodeID: "16", FieldName: "last_frame", FieldValue: nil}},
+		UnwireUnusedMedia(mapping, workflow, MediaRequest{Images: []string{"x"}}))
+}

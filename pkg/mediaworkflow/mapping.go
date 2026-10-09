@@ -108,10 +108,15 @@ func (m InputMapping) MediaCapacity() map[string]int {
 }
 
 // UnwireUnusedMedia returns overrides that disconnect the loaders of
-// optional media slots the request leaves empty: every input that links to
+// optional media slots (and an optional last frame) the request leaves empty: every input that links to
 // such a loader is set to null. A workflow can then expose many reference
 // slots (one RunningHub workflow ID) and still run with fewer files without
 // its saved sample files leaking into the result.
+// passThroughMediaInputs are input names through which a helper node takes
+// the file it transforms; a node fed an unused file through one of them has
+// nothing to work on.
+var passThroughMediaInputs = map[string]bool{"image": true, "images": true, "video": true, "audio": true, "pixels": true}
+
 func UnwireUnusedMedia(mapping InputMapping, workflow map[string]map[string]any, req MediaRequest) []NodeOverride {
 	if strings.EqualFold(strings.TrimSpace(mapping.UnusedMedia), "keep") || len(workflow) == 0 {
 		return nil
@@ -124,10 +129,35 @@ func UnwireUnusedMedia(mapping InputMapping, workflow map[string]map[string]any,
 			if binding.Index >= counts[binding.Role] && !binding.Required {
 				unused[binding.NodeID] = true
 			}
+		case RoleLastFrame:
+			// One workflow can do first frame and first + last frame.
+			if strings.TrimSpace(req.LastFrame) == "" && !binding.Required {
+				unused[binding.NodeID] = true
+			}
 		}
 	}
 	if len(unused) == 0 {
 		return nil
+	}
+	// A node that only processes an unused file (resize, crop...) is unused
+	// too: unwire at the node where the file would have joined the rest of the
+	// workflow, not at the helper that would then miss its input.
+	for changed := true; changed; {
+		changed = false
+		for _, id := range sortedNodeIDs(workflow) {
+			if unused[id] {
+				continue
+			}
+			inputs, _ := workflow[id]["inputs"].(map[string]any)
+			for field, value := range inputs {
+				link, ok := value.([]any)
+				if ok && len(link) == 2 && unused[scalarString(link[0])] && passThroughMediaInputs[strings.ToLower(field)] {
+					unused[id] = true
+					changed = true
+					break
+				}
+			}
+		}
 	}
 	overrides := make([]NodeOverride, 0)
 	for _, id := range sortedNodeIDs(workflow) {

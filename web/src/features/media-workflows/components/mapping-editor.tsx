@@ -25,10 +25,13 @@ const ROLES: InputRole[] = [
   'last_frame',
   'duration',
   'aspect_ratio',
+  'megapixels',
+  'long_edge',
   'width',
   'height',
   'seed',
   'fixed',
+  'timeline',
 ]
 
 const MEDIA_ROLES = new Set<InputRole>(['image', 'video', 'audio'])
@@ -257,6 +260,20 @@ export function MappingEditor(props: {
                 defaultValue={enumToText(row.enum)}
                 onBlur={(event) =>
                   updateRow(index, { enum: textToEnum(event.target.value) })
+                }
+              />
+            </div>
+          )}
+          {(row.role === 'megapixels' || row.role === 'long_edge') && (
+            <div className='flex flex-col gap-1'>
+              <Label className='text-muted-foreground text-xs'>
+                {t('Value at 720p (the workflow\'s own setting)')}
+              </Label>
+              <Input
+                inputMode='decimal'
+                value={row.value === undefined ? '' : String(row.value)}
+                onChange={(event) =>
+                  updateRow(index, { value: event.target.value })
                 }
               />
             </div>

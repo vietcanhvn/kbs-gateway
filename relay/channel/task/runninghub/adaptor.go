@@ -68,6 +68,7 @@ type taskMetadata struct {
 	Height          int      `json:"height,omitempty"`
 	Ratio           string   `json:"ratio,omitempty"`
 	AspectRatio     string   `json:"aspect_ratio,omitempty"`
+	Resolution      string   `json:"resolution,omitempty"`
 	Duration        int      `json:"duration,omitempty"`
 	Seed            int64    `json:"seed,omitempty"`
 	// Timeline workflows (long take in segments).
@@ -114,14 +115,25 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if err != nil {
 		return nil
 	}
+	billing := map[string]float64{}
 	// Timeline (long take): the video is as long as its segments together.
 	if seconds, ok, err := workflow.TimelineSeconds(inputs); ok {
 		if err != nil {
 			return nil
 		}
-		return map[string]float64{"seconds": float64(BilledSeconds(workflow.Mapping, int(math.Ceil(seconds)), 0))}
+		billing["seconds"] = float64(BilledSeconds(workflow.Mapping, int(math.Ceil(seconds)), 0))
+	} else {
+		billing["seconds"] = float64(BilledSeconds(workflow.Mapping, inputs.Duration, workflow.DefaultSeconds))
 	}
-	return map[string]float64{"seconds": float64(BilledSeconds(workflow.Mapping, inputs.Duration, workflow.DefaultSeconds))}
+	// Workflows that render the requested resolution: the per-second price is
+	// the workflow default (720p); larger tiers cost more by pixel count.
+	// Smaller tiers keep the 720p price (RunningHub time does not shrink as fast).
+	if workflow.Mapping.HasResolutionRole() && mediaworkflow.KnownResolution(inputs.Resolution) {
+		if ratio := mediaworkflow.ResolutionPixelRatio(inputs.Resolution); ratio > 1 {
+			billing["resolution"] = ratio
+		}
+	}
+	return billing
 }
 
 // BilledSeconds is the duration actually rendered (clamped to the duration
@@ -474,6 +486,7 @@ func taskInputs(req relaycommon.TaskSubmitReq) (Inputs, error) {
 		Width:          firstPositive(req.Width, metadata.Width),
 		Height:         firstPositive(req.Height, metadata.Height),
 		Ratio:          firstNonEmpty(metadata.Ratio, metadata.AspectRatio),
+		Resolution:     metadata.Resolution,
 		Seed:           metadata.Seed,
 		Segments:       metadata.Segments,
 		AudioLock:      metadata.AudioLock,

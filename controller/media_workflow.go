@@ -444,6 +444,8 @@ type mediaWorkflowTestRequest struct {
 	Audios    []string `json:"audios"`
 	Duration  int      `json:"duration"`
 	Ratio     string   `json:"ratio"`
+	// Resolution tier ("1080p"...) for workflows with megapixels / long_edge inputs.
+	Resolution string `json:"resolution"`
 	// ExtraNodes are appended to the generated nodeInfoList as-is, so an
 	// admin can try overrides the mapping cannot express yet (for example
 	// unwiring an unused reference slot).
@@ -488,7 +490,7 @@ func TestMediaWorkflow(c *gin.Context) {
 	defer cancel()
 	task, err := workflow.BuildTask(ctx, client, taskrh.Inputs{
 		Prompt: req.Prompt, Images: req.Images, Videos: req.Videos, Audios: req.Audios,
-		Duration: req.Duration, Ratio: req.Ratio, Segments: req.Segments, AudioLock: req.AudioLock,
+		Duration: req.Duration, Ratio: req.Ratio, Resolution: req.Resolution, Segments: req.Segments, AudioLock: req.AudioLock,
 	}, taskrh.ReadMediaInput)
 	if err != nil {
 		common.ApiError(c, err)

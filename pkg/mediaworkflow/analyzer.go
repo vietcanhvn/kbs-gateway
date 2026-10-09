@@ -306,7 +306,9 @@ func SuggestMapping(analysis *Analysis) InputMapping {
 		if !candidate.Active || candidate.Role == RoleText {
 			continue
 		}
-		single := candidate.Role != RoleImage && candidate.Role != RoleVideo && candidate.Role != RoleAudio
+		// Media and resolution inputs can repeat (a two-pass workflow sizes both
+		// passes); every other role binds once.
+		single := candidate.Role != RoleImage && candidate.Role != RoleVideo && candidate.Role != RoleAudio && candidate.Role != RoleMegapixels
 		if single && taken[candidate.Role] {
 			continue
 		}
@@ -317,6 +319,10 @@ func SuggestMapping(analysis *Analysis) InputMapping {
 			binding.ValueType = numberValueType(candidate.ClassType, candidate.CurrentValue)
 		case RoleAspectRatio:
 			binding.Enum = defaultAspectRatioEnum(candidate.ClassType, candidate.CurrentValue)
+		case RoleMegapixels:
+			// The workflow's own value stands for 720p (see resolution.go).
+			binding.ValueType = "float"
+			binding.Value = candidate.CurrentValue
 		}
 		mapping.Inputs = append(mapping.Inputs, binding)
 	}
@@ -382,6 +388,14 @@ func suggestActiveInputs(workflow map[string]map[string]any, ids []string) []Inp
 			texts = append(texts, textCandidate{id: id, field: field, value: value, positive: reach["positive"] || reach["prompt"] || reach["text"]})
 			continue
 		}
+		// A primitive number feeding a "megapixels" input (H3 Action's two-pass
+		// workflow): the user-facing resolution.
+		if isPrimitiveNumber(lowerClass) && feedsInput(consumers, id, "megapixels") {
+			if _, ok := inputs["value"]; ok {
+				add(RoleMegapixels, id, "value", inputs["value"])
+				continue
+			}
+		}
 		if isPrimitiveNumber(lowerClass) && titleMeansDuration(title) {
 			if _, ok := inputs["value"]; ok {
 				add(RoleDuration, id, "value", inputs["value"])
@@ -393,7 +407,16 @@ func suggestActiveInputs(workflow map[string]map[string]any, ids []string) []Inp
 			if isLink(value) {
 				continue
 			}
-			switch strings.ToLower(field) {
+			lowerField := strings.ToLower(field)
+			// Easy-Media dynamic combos name sub-fields "resolution.megapixels".
+			if dot := strings.LastIndex(lowerField, "."); dot >= 0 {
+				lowerField = lowerField[dot+1:]
+			}
+			switch lowerField {
+			case "megapixels":
+				if isNumber(value) {
+					add(RoleMegapixels, id, field, value)
+				}
 			case "duration", "seconds":
 				add(RoleDuration, id, field, value)
 			case "aspect_ratio", "ratio":
@@ -641,8 +664,18 @@ func downstreamInputNames(consumers map[string][][2]string, start string) map[st
 	return names
 }
 
+// feedsInput reports whether node id is linked straight into an input named name.
+func feedsInput(consumers map[string][][2]string, id, name string) bool {
+	for _, edge := range consumers[id] {
+		if strings.EqualFold(edge[1], name) {
+			return true
+		}
+	}
+	return false
+}
+
 func roleOrder(role string) int {
-	order := []string{RolePrompt, RoleNegativePrompt, RoleImage, RoleLastFrame, RoleVideo, RoleAudio, RoleDuration, RoleAspectRatio, RoleWidth, RoleHeight, RoleSeed, RoleText, RoleTimeline}
+	order := []string{RolePrompt, RoleNegativePrompt, RoleImage, RoleLastFrame, RoleVideo, RoleAudio, RoleDuration, RoleAspectRatio, RoleMegapixels, RoleLongEdge, RoleWidth, RoleHeight, RoleSeed, RoleText, RoleTimeline}
 	for i, item := range order {
 		if item == role {
 			return i

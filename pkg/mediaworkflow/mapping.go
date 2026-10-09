@@ -68,7 +68,9 @@ type MediaRequest struct {
 	Width          int
 	Height         int
 	Ratio          string
-	Seed           int64
+	// Resolution tier ("720p", "1080p"...) for megapixels / long_edge inputs.
+	Resolution string
+	Seed       int64
 }
 
 // RequestError marks a problem with the client's request (HTTP 400) as
@@ -280,6 +282,10 @@ func BuildNodeOverrides(mapping InputMapping, req MediaRequest) ([]NodeOverride,
 		case RoleHeight:
 			if req.Height > 0 {
 				set(binding, numberForBinding(binding, clamp(float64(req.Height), binding.Min, binding.Max)))
+			}
+		case RoleMegapixels, RoleLongEdge:
+			if value, ok := resolutionValue(binding, req); ok {
+				set(binding, value)
 			}
 		case RoleSeed:
 			seed := req.Seed

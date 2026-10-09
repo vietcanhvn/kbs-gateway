@@ -137,6 +137,7 @@ type Inputs struct {
 	Width          int
 	Height         int
 	Ratio          string
+	Resolution     string
 	Seed           int64
 	// Timeline workflows: segments (DC-Media metadata.segments) and whether the
 	// first audio is the soundtrack the video follows (lip-sync).
@@ -184,6 +185,7 @@ func (w *Workflow) BuildTask(ctx context.Context, client *rh.Client, in Inputs, 
 		Width:          in.Width,
 		Height:         in.Height,
 		Ratio:          in.Ratio,
+		Resolution:     in.Resolution,
 		Seed:           in.Seed,
 	}
 	var err error

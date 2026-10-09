@@ -78,6 +78,23 @@ mapping (ảnh / video / audio / lời nhắc không cần gán riêng). Mỗi l
 - Tính tiền theo **tổng số giây các đoạn**. Mặc định đoạn 1 là `shot`, các đoạn sau `context`;
   có ảnh thì `r2v`, không thì `t2v`. Mỗi đoạn 1–20 giây, tối đa 24 đoạn.
 
+## Độ phân giải (metadata.resolution)
+
+Workflow tự đặt cỡ khung (ResolutionSelector, Easy-Media `resolution.megapixels`, một PrimitiveInt
+cạnh dài nối vào node resize) thì gán ô đó vai trò:
+
+- **`megapixels`**: số megapixel (ô `megapixels`, `resolution.megapixels`, hoặc PrimitiveFloat nối vào
+  ô `megapixels` - bộ phân tích tự nhận). Gán được nhiều ô (workflow 2 lượt: lượt nháp + lượt chính).
+- **`long_edge`**: cạnh dài tính bằng px (PrimitiveInt nối vào width/height của node resize) - gán tay.
+
+Ô **"Giá trị ứng với 720p"** là giá trị gốc của workflow. Khách gửi `resolution` (360p, 480p, 720p,
+1080p, 2k, 4k) thì gateway nhân giá trị gốc theo số điểm ảnh so với 720p (1080p = ×2,25 megapixel,
+cạnh dài ×1,5); 720p hoặc không gửi = giữ nguyên workflow. Có min / max thì kẹp trong khoảng đó.
+Tỷ lệ khung: gán vai trò `aspect_ratio` cho ô tỷ lệ (cả `resolution.aspect_ratio` của Easy-Media).
+
+Tính tiền: giá theo giây là giá ở 720p; mức lớn hơn nhân theo số điểm ảnh (1080p ×2,25, 2k ×4,
+4k ×9); mức nhỏ hơn giữ giá 720p.
+
 ## Model và LoRA
 
 - Workflow chỉ dùng được tệp model mà tài khoản RunningHub sở hữu API key nạp được.

@@ -38,6 +38,7 @@ func TestAnalyzeReferenceVideoWorkflow(t *testing.T) {
 		RolePrompt:         {"21.text"},
 		RoleNegativePrompt: {"22.text"},
 		RoleImage:          {"20.image"},
+		RoleMegapixels:     {"24.megapixels"},
 		RoleDuration:       {"23.value"},
 		RoleAspectRatio:    {"24.aspect_ratio"},
 		RoleSeed:           {"25.noise_seed"},
@@ -101,7 +102,8 @@ func TestSuggestMappingBindsActiveInputs(t *testing.T) {
 	for _, binding := range mapping.Inputs {
 		byRole[binding.Role] = binding
 	}
-	require.Len(t, mapping.Inputs, 6)
+	require.Len(t, mapping.Inputs, 7)
+	assert.Equal(t, InputBinding{Role: RoleMegapixels, NodeID: "24", Field: "megapixels", ValueType: "float", Value: 1.0}, byRole[RoleMegapixels], "the workflow's own size stands for 720p")
 	assert.Equal(t, InputBinding{Role: RolePrompt, NodeID: "21", Field: "text"}, byRole[RolePrompt])
 	assert.Equal(t, "float", byRole[RoleDuration].ValueType)
 	assert.Equal(t, "9:16 (Portrait Widescreen)", byRole[RoleAspectRatio].Enum["9:16"])

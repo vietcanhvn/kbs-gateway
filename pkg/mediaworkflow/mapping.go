@@ -94,6 +94,12 @@ func (m InputMapping) HasRole(role string) bool {
 // MediaCapacity reports how many media of each kind a mapping accepts.
 func (m InputMapping) MediaCapacity() map[string]int {
 	capacity := map[string]int{}
+	if m.HasRole(RoleTimeline) {
+		// Timeline workflows place media per segment (ComfyUI-Easy-Media).
+		capacity[RoleImage] = 24
+		capacity[RoleVideo] = 6
+		capacity[RoleAudio] = 1
+	}
 	for _, binding := range m.Inputs {
 		switch binding.Role {
 		case RoleImage, RoleVideo, RoleAudio:
@@ -219,7 +225,7 @@ func BuildNodeOverrides(mapping InputMapping, req MediaRequest) ([]NodeOverride,
 	if req.LastFrame != "" && capacity[RoleLastFrame] == 0 {
 		return nil, requestErrorf("this workflow has no last-frame input")
 	}
-	if strings.TrimSpace(req.Prompt) != "" && !mappingHasRole(mapping, RolePrompt) {
+	if strings.TrimSpace(req.Prompt) != "" && !mappingHasRole(mapping, RolePrompt) && !mappingHasRole(mapping, RoleTimeline) {
 		return nil, fmt.Errorf("workflow has no prompt input mapped")
 	}
 

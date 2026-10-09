@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -69,6 +70,9 @@ type taskMetadata struct {
 	AspectRatio     string   `json:"aspect_ratio,omitempty"`
 	Duration        int      `json:"duration,omitempty"`
 	Seed            int64    `json:"seed,omitempty"`
+	// Timeline workflows (long take in segments).
+	Segments  []mediaworkflow.TimelineSegmentSpec `json:"segments,omitempty"`
+	AudioLock *bool                               `json:"audio_lock,omitempty"`
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
@@ -109,6 +113,13 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	inputs, err := taskInputs(req)
 	if err != nil {
 		return nil
+	}
+	// Timeline (long take): the video is as long as its segments together.
+	if seconds, ok, err := workflow.TimelineSeconds(inputs); ok {
+		if err != nil {
+			return nil
+		}
+		return map[string]float64{"seconds": float64(BilledSeconds(workflow.Mapping, int(math.Ceil(seconds)), 0))}
 	}
 	return map[string]float64{"seconds": float64(BilledSeconds(workflow.Mapping, inputs.Duration, workflow.DefaultSeconds))}
 }
@@ -464,6 +475,8 @@ func taskInputs(req relaycommon.TaskSubmitReq) (Inputs, error) {
 		Height:         firstPositive(req.Height, metadata.Height),
 		Ratio:          firstNonEmpty(metadata.Ratio, metadata.AspectRatio),
 		Seed:           metadata.Seed,
+		Segments:       metadata.Segments,
+		AudioLock:      metadata.AudioLock,
 	}
 	if inputs.Seed <= 0 && req.Seed > 0 {
 		inputs.Seed = int64(req.Seed)

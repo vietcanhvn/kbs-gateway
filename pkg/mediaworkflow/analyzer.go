@@ -642,7 +642,7 @@ func downstreamInputNames(consumers map[string][][2]string, start string) map[st
 }
 
 func roleOrder(role string) int {
-	order := []string{RolePrompt, RoleNegativePrompt, RoleImage, RoleLastFrame, RoleVideo, RoleAudio, RoleDuration, RoleAspectRatio, RoleWidth, RoleHeight, RoleSeed, RoleText}
+	order := []string{RolePrompt, RoleNegativePrompt, RoleImage, RoleLastFrame, RoleVideo, RoleAudio, RoleDuration, RoleAspectRatio, RoleWidth, RoleHeight, RoleSeed, RoleText, RoleTimeline}
 	for i, item := range order {
 		if item == role {
 			return i

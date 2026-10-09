@@ -54,6 +54,24 @@ nodeInfoList), nên tệp mẫu không lọt vào kết quả. Ô bắt buộc (
 rút. Muốn giữ tệp mẫu của workflow cho ô trống, đặt `unused_media: "keep"` trong
 input mapping.
 
+## Workflow "video dài" (dòng thời gian, ComfyUI-Easy-Media)
+
+Workflow dùng node **MultiTrack Editor** (`easy multiTrackEditor`) + **MultiTrack Project** (MiniMax H3):
+cả bảng dòng thời gian là một ô chữ JSON `track_data`. Gán ô đó vai trò **`timeline`** trong input
+mapping (ảnh / video / audio / lời nhắc không cần gán riêng). Mỗi lượt gọi, gateway dựng lại
+`track_data` từ yêu cầu:
+
+- `metadata.segments`: `[{prompt, seconds, mode, continuity, images, video}]` - `mode` là `r2v`
+  (ảnh tham chiếu), `t2v`, `i2v` (ảnh làm khung đầu), `fl2v`, `v2v` (sửa video), `rv2v`, `l2v`;
+  `continuity` là `shot` (cảnh mới) hoặc `context` / `context_drift` (nối tiếp đoạn trước);
+  `images` là số thứ tự ảnh gửi kèm (bỏ trống = mọi ảnh), `video` là số thứ tự video.
+- Không có `segments` thì gateway đọc dòng đánh dấu trong lời nhắc:
+  `[Đoạn 2 – 8s – TI2V – context] …`; không có nữa thì cả lời nhắc là một đoạn.
+- Audio đầu tiên: mặc định là **nhạc / tiếng của cả video** (khoá tiếng, nhân vật nhép theo);
+  `metadata.audio_lock: false` thì chỉ là giọng tham chiếu.
+- Tính tiền theo **tổng số giây các đoạn**. Mặc định đoạn 1 là `shot`, các đoạn sau `context`;
+  có ảnh thì `r2v`, không thì `t2v`. Mỗi đoạn 1–20 giây, tối đa 24 đoạn.
+
 ## Model và LoRA
 
 - Workflow chỉ dùng được tệp model mà tài khoản RunningHub sở hữu API key nạp được.

@@ -95,6 +95,35 @@ func defaultDuration(nodes map[string]map[string]any, mapping mediaworkflow.Inpu
 	return 0
 }
 
+func (w *Workflow) timelineBinding() (mediaworkflow.InputBinding, bool) {
+	for _, binding := range w.Mapping.Inputs {
+		if binding.Role == mediaworkflow.RoleTimeline {
+			return binding, true
+		}
+	}
+	return mediaworkflow.InputBinding{}, false
+}
+
+// PlanTimeline resolves the segments of a timeline request.
+func (w *Workflow) PlanTimeline(in Inputs) ([]mediaworkflow.TimelineSegment, error) {
+	return mediaworkflow.PlanTimeline(in.Prompt, in.Segments, float64(in.Duration), len(in.Images), len(in.Videos))
+}
+
+// TimelineSeconds is the billed length of a timeline request (sum of its
+// segments at the template's frame rate); ok is false for other workflows.
+func (w *Workflow) TimelineSeconds(in Inputs) (float64, bool, error) {
+	timeline, ok := w.timelineBinding()
+	if !ok {
+		return 0, false, nil
+	}
+	segments, err := w.PlanTimeline(in)
+	if err != nil {
+		return 0, true, err
+	}
+	template, _ := w.nodes[timeline.NodeID]["inputs"].(map[string]any)[timeline.Field].(string)
+	return mediaworkflow.TimelineSeconds(segments, mediaworkflow.TimelineFrameRate(template)), true, nil
+}
+
 // Inputs is a DC-Media request reduced to workflow inputs. Media entries are
 // data URLs or http(s) URLs; they are uploaded to RunningHub before the run.
 type Inputs struct {
@@ -109,6 +138,10 @@ type Inputs struct {
 	Height         int
 	Ratio          string
 	Seed           int64
+	// Timeline workflows: segments (DC-Media metadata.segments) and whether the
+	// first audio is the soundtrack the video follows (lip-sync).
+	Segments  []mediaworkflow.TimelineSegmentSpec
+	AudioLock *bool
 }
 
 // MediaReader loads one input (data URL or URL) as a file.
@@ -175,6 +208,24 @@ func (w *Workflow) BuildTask(ctx context.Context, client *rh.Client, in Inputs, 
 		return rh.CreateTaskRequest{}, err
 	}
 	overrides = append(overrides, mediaworkflow.UnwireUnusedMedia(w.Mapping, w.nodes, request)...)
+	if timeline, ok := w.timelineBinding(); ok {
+		template, _ := w.nodes[timeline.NodeID]["inputs"].(map[string]any)[timeline.Field].(string)
+		segments, err := w.PlanTimeline(in)
+		if err != nil {
+			return rh.CreateTaskRequest{}, err
+		}
+		lock := len(request.Audios) > 0
+		if in.AudioLock != nil {
+			lock = *in.AudioLock
+		}
+		trackData, err := mediaworkflow.BuildTrackData(template, segments, mediaworkflow.TimelineMedia{
+			Images: request.Images, Videos: request.Videos, Audios: request.Audios, AudioLock: lock,
+		}, w.Template.Render)
+		if err != nil {
+			return rh.CreateTaskRequest{}, err
+		}
+		overrides = append(overrides, mediaworkflow.NodeOverride{NodeID: timeline.NodeID, FieldName: timeline.Field, FieldValue: trackData})
+	}
 	nodeInfoList := make([]rh.NodeInfo, 0, len(overrides))
 	for _, override := range overrides {
 		nodeInfoList = append(nodeInfoList, rh.NodeInfo{NodeID: override.NodeID, FieldName: override.FieldName, FieldValue: override.FieldValue})

@@ -387,3 +387,29 @@ func TestBuildTaskSendsTheBilledDurationWhenNoneRequested(t *testing.T) {
 	}
 	assert.EqualValues(t, 8, seconds, "the workflow default that is billed is sent explicitly")
 }
+
+func TestTimelineWorkflowBuildsTrackDataAndBillsTheSegments(t *testing.T) {
+	template := `{"frame_rate":24,"total_length":0,"tracks":[{"id":"t","name":"Task 0","type":"task","segments":[]}]}`
+	apiJSON, err := json.Marshal(map[string]any{"29": map[string]any{"class_type": "easy multiTrackEditor", "inputs": map[string]any{"track_data": template}}})
+	require.NoError(t, err)
+	record := &model.MediaWorkflow{
+		ModelName: "rh-longtake", WorkflowID: "123456", ApiJSON: string(apiJSON),
+		InputMapping: `{"billing":"per_second","inputs":[{"role":"timeline","node_id":"29","field":"track_data"}]}`,
+	}
+	workflow, err := WorkflowFromRecord(record)
+	require.NoError(t, err)
+	in := Inputs{Prompt: "[Đoạn 1 – 8s] walks\n[Đoạn 2 – 6s] climbs"}
+	seconds, ok, err := workflow.TimelineSeconds(in)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.InDelta(t, 14.0, seconds, 0.01)
+
+	task, err := workflow.BuildTask(context.Background(), nil, in, nil)
+	require.NoError(t, err)
+	require.Len(t, task.NodeInfoList, 1)
+	assert.Equal(t, "29", task.NodeInfoList[0].NodeID)
+	assert.Equal(t, "track_data", task.NodeInfoList[0].FieldName)
+	var data map[string]any
+	require.NoError(t, json.Unmarshal([]byte(task.NodeInfoList[0].FieldValue.(string)), &data))
+	assert.EqualValues(t, 336, data["total_length"])
+}

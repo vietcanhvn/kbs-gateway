@@ -448,6 +448,9 @@ type mediaWorkflowTestRequest struct {
 	// admin can try overrides the mapping cannot express yet (for example
 	// unwiring an unused reference slot).
 	ExtraNodes []rh.NodeInfo `json:"extra_nodes"`
+	// Timeline workflows: segments and audio lock, as in DC-Media metadata.
+	Segments  []mediaworkflow.TimelineSegmentSpec `json:"segments"`
+	AudioLock *bool                               `json:"audio_lock"`
 }
 
 // TestMediaWorkflow submits one real RunningHub task for a saved workflow
@@ -485,7 +488,7 @@ func TestMediaWorkflow(c *gin.Context) {
 	defer cancel()
 	task, err := workflow.BuildTask(ctx, client, taskrh.Inputs{
 		Prompt: req.Prompt, Images: req.Images, Videos: req.Videos, Audios: req.Audios,
-		Duration: req.Duration, Ratio: req.Ratio,
+		Duration: req.Duration, Ratio: req.Ratio, Segments: req.Segments, AudioLock: req.AudioLock,
 	}, taskrh.ReadMediaInput)
 	if err != nil {
 		common.ApiError(c, err)

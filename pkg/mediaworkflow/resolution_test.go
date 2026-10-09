@@ -29,6 +29,11 @@ func TestResolutionRolesScaleTheWorkflowDefault(t *testing.T) {
 	assert.Equal(t, 4.0, values("4k")["29"], "clamped to the binding maximum")
 	assert.Empty(t, values(""), "no tier: leave the workflow as it is")
 	assert.True(t, mapping.HasResolutionRole())
+	assert.InDelta(t, 2.25, mapping.ResolutionScale("1080p"), 0.01)
+	capped := InputMapping{Inputs: mapping.Inputs[:1]}
+	assert.InDelta(t, 4.0, capped.ResolutionScale("4k"), 0.01, "billed as rendered: the 4 MP cap, not 4K")
+	assert.Equal(t, 1.0, mapping.ResolutionScale("360p"), "smaller tiers bill as 720p")
+	assert.Equal(t, 1.0, InputMapping{}.ResolutionScale("4k"), "no resolution input: workflow size, no surcharge")
 	assert.InDelta(t, 2.25, ResolutionPixelRatio("1080p"), 0.001)
 	assert.Equal(t, 1.0, ResolutionPixelRatio("weird"))
 }

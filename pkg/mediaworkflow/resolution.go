@@ -46,6 +46,33 @@ func KnownResolution(tier string) bool {
 	return ok
 }
 
+// ResolutionScale is how much larger than its 720p setting the workflow
+// renders a request's tier (pixel ratio, after the bindings' min / max): 1
+// when the workflow has no resolution input or the request names no tier.
+func (m InputMapping) ResolutionScale(tier string) float64 {
+	scale := 0.0
+	for _, binding := range m.Inputs {
+		if binding.Role != RoleMegapixels && binding.Role != RoleLongEdge {
+			continue
+		}
+		value, ok := resolutionValue(binding, MediaRequest{Resolution: tier})
+		if !ok {
+			continue
+		}
+		base, hasBase := numberOf(binding.Value)
+		if !hasBase || base <= 0 {
+			base = map[string]float64{RoleMegapixels: 1280 * 720 / 1e6, RoleLongEdge: 1280}[binding.Role]
+		}
+		got, _ := numberOf(value)
+		ratio := got / base
+		if binding.Role == RoleLongEdge {
+			ratio *= ratio
+		}
+		scale = math.Max(scale, ratio)
+	}
+	return math.Max(scale, 1)
+}
+
 // HasResolutionRole reports whether the workflow lets requests pick a resolution.
 func (m InputMapping) HasResolutionRole() bool {
 	return m.HasRole(RoleMegapixels) || m.HasRole(RoleLongEdge)

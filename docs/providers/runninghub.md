@@ -92,7 +92,7 @@ cạnh dài nối vào node resize) thì gán ô đó vai trò:
 cạnh dài ×1,5); 720p hoặc không gửi = giữ nguyên workflow. Có min / max thì kẹp trong khoảng đó.
 Tỷ lệ khung: gán vai trò `aspect_ratio` cho ô tỷ lệ (cả `resolution.aspect_ratio` của Easy-Media).
 
-Tính tiền: giá theo giây là giá ở 720p; mức lớn hơn nhân theo số điểm ảnh (1080p ×2,25, 2k ×4,
+Tính tiền: giá theo giây là giá ở 720p; mức lớn hơn nhân theo số điểm ảnh workflow THẬT SỰ dựng (sau khi kẹp max; 1080p ×2,25, 2k ×4,
 4k ×9); mức nhỏ hơn giữ giá 720p.
 
 ## Model và LoRA

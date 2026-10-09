@@ -368,3 +368,22 @@ func TestBilledSecondsFallsBackToWorkflowDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 8.0, workflow.DefaultSeconds)
 }
+
+func TestBuildTaskSendsTheBilledDurationWhenNoneRequested(t *testing.T) {
+	record := &model.MediaWorkflow{
+		ModelName: "rh-test", WorkflowID: "123456",
+		ApiJSON:      `{"259":{"class_type":"PrimitiveFloat","inputs":{"value":8}},"263":{"class_type":"Text","inputs":{"text":"x"}}}`,
+		InputMapping: `{"inputs":[{"role":"prompt","node_id":"263","field":"text"},{"role":"duration","node_id":"259","field":"value","min":3,"max":10,"value_type":"float"}]}`,
+	}
+	workflow, err := WorkflowFromRecord(record)
+	require.NoError(t, err)
+	task, err := workflow.BuildTask(context.Background(), nil, Inputs{Prompt: "a cat"}, nil)
+	require.NoError(t, err)
+	var seconds any
+	for _, node := range task.NodeInfoList {
+		if node.NodeID == "259" {
+			seconds = node.FieldValue
+		}
+	}
+	assert.EqualValues(t, 8, seconds, "the workflow default that is billed is sent explicitly")
+}

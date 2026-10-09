@@ -81,6 +81,16 @@ func requestErrorf(format string, args ...any) error {
 	return &RequestError{Message: fmt.Sprintf(format, args...)}
 }
 
+// HasRole reports whether any input is bound to the role.
+func (m InputMapping) HasRole(role string) bool {
+	for _, binding := range m.Inputs {
+		if binding.Role == role {
+			return true
+		}
+	}
+	return false
+}
+
 // MediaCapacity reports how many media of each kind a mapping accepts.
 func (m InputMapping) MediaCapacity() map[string]int {
 	capacity := map[string]int{}

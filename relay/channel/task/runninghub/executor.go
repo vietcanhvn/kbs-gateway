@@ -137,10 +137,17 @@ func (w *Workflow) BuildTask(ctx context.Context, client *rh.Client, in Inputs, 
 		}
 		return names, nil
 	}
+	// Always render the duration that is billed: a request without one used
+	// to leave the workflow's own value in place, which can differ from what
+	// the gateway charged (e.g. "0 = whole audio" in lip-sync workflows).
+	duration := in.Duration
+	if w.Mapping.HasRole(mediaworkflow.RoleDuration) {
+		duration = BilledSeconds(w.Mapping, in.Duration, w.DefaultSeconds)
+	}
 	request := mediaworkflow.MediaRequest{
 		Prompt:         w.Template.Render(in.Prompt),
 		NegativePrompt: in.NegativePrompt,
-		Duration:       in.Duration,
+		Duration:       duration,
 		Width:          in.Width,
 		Height:         in.Height,
 		Ratio:          in.Ratio,

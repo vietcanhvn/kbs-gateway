@@ -106,7 +106,7 @@ func (w *Workflow) timelineBinding() (mediaworkflow.InputBinding, bool) {
 
 // PlanTimeline resolves the segments of a timeline request.
 func (w *Workflow) PlanTimeline(in Inputs) ([]mediaworkflow.TimelineSegment, error) {
-	return mediaworkflow.PlanTimeline(in.Prompt, in.Segments, float64(in.Duration), len(in.Images), len(in.Videos))
+	return mediaworkflow.PlanTimeline(in.Prompt, in.Segments, float64(in.Duration), len(in.Images), len(in.Videos), len(in.Audios))
 }
 
 // TimelineSeconds is the billed length of a timeline request (sum of its
@@ -214,7 +214,12 @@ func (w *Workflow) BuildTask(ctx context.Context, client *rh.Client, in Inputs, 
 		if err != nil {
 			return rh.CreateTaskRequest{}, err
 		}
+		// Default: one attached audio is the soundtrack, unless parts chose
+		// their own audios (voice / sound references per part).
 		lock := len(request.Audios) > 0
+		for _, segment := range segments {
+			lock = lock && segment.Audios == nil
+		}
 		if in.AudioLock != nil {
 			lock = *in.AudioLock
 		}

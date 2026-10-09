@@ -24,25 +24,36 @@ import (
 const RoleTimeline = "timeline"
 
 // TimelineSegmentSpec is one segment as a client asks for it (DC-Media
-// metadata.segments). Images / Video index into the request's media.
+// metadata.segments). Images / Videos / Audios index into the request's media
+// (0 = first file sent); nil = the default (all images, no video / audio).
 type TimelineSegmentSpec struct {
 	Prompt     string  `json:"prompt"`
 	Seconds    float64 `json:"seconds"`
-	Mode       string  `json:"mode,omitempty"`       // r2v | t2v | i2v | fl2v | v2v | rv2v | l2v
+	Mode       string  `json:"mode,omitempty"`       // auto | t2v | ti2v | i2v | fl2v | r2v | rv2v | v2v | vi2v | l2v
 	Continuity string  `json:"continuity,omitempty"` // shot | context | context_drift
 	Images     []int   `json:"images,omitempty"`
-	Video      *int    `json:"video,omitempty"`
+	Videos     []int   `json:"videos,omitempty"`
+	Audios     []int   `json:"audios,omitempty"`
+	// Video is the older single-video field (same as Videos: [n]).
+	Video *int `json:"video,omitempty"`
 }
 
-// TimelineSegment is a resolved segment.
+// TimelineSegment is a resolved segment. Mode is one of t2v, ti2v, i2v, fl2v
+// (Easy-Media "default": the image count picks T2V / I2V / FL2V / FMLF2V),
+// r2v, rv2v (reference), v2v (edit; VI2V with images) and l2v (the part's
+// last image is its LAST frame).
 type TimelineSegment struct {
 	Prompt     string
 	Seconds    float64
 	Mode       string
 	Continuity string
 	Images     []int
-	Video      int // -1 = none
+	Videos     []int
+	Audios     []int
 }
+
+// At most this many videos / audios per part (H3 takes 3 of each).
+const timelineMaxSegmentMedia = 3
 
 const (
 	timelineMinSeconds     = 1
@@ -61,7 +72,7 @@ var timelineSecondsToken = regexp.MustCompile(`(?i)(\d+(?:[.,]\d+)?)\s*(?:s|giâ
 // PlanTimeline resolves the segments of a request: explicit specs win, then
 // "[Đoạn n – 8s – mode – continuity]" markers in the prompt, then one segment
 // with the whole prompt. imageCount / videoCount are the request's media.
-func PlanTimeline(prompt string, specs []TimelineSegmentSpec, fallbackSeconds float64, imageCount, videoCount int) ([]TimelineSegment, error) {
+func PlanTimeline(prompt string, specs []TimelineSegmentSpec, fallbackSeconds float64, imageCount, videoCount, audioCount int) ([]TimelineSegment, error) {
 	if len(specs) == 0 {
 		specs = parseTimelineMarkers(prompt)
 	}
@@ -93,25 +104,37 @@ func PlanTimeline(prompt string, specs []TimelineSegmentSpec, fallbackSeconds fl
 		if images == nil {
 			images = allImages
 		}
-		for _, image := range images {
-			if image < 0 || image >= imageCount {
-				return nil, requestErrorf("timeline segment %d uses image %d, but only %d image(s) were sent", index+1, image+1, imageCount)
-			}
+		if err := checkTimelineMedia(index, "image", images, imageCount); err != nil {
+			return nil, err
 		}
-		video := -1
-		if spec.Video != nil {
-			if *spec.Video < 0 || *spec.Video >= videoCount {
-				return nil, requestErrorf("timeline segment %d uses video %d, but only %d video(s) were sent", index+1, *spec.Video+1, videoCount)
-			}
-			video = *spec.Video
+		videos := spec.Videos
+		if videos == nil && spec.Video != nil {
+			videos = []int{*spec.Video}
+		}
+		if err := checkTimelineMedia(index, "video", videos, videoCount); err != nil {
+			return nil, err
+		}
+		audios := spec.Audios
+		if err := checkTimelineMedia(index, "audio", audios, audioCount); err != nil {
+			return nil, err
+		}
+		if len(videos) > timelineMaxSegmentMedia || len(audios) > timelineMaxSegmentMedia {
+			return nil, requestErrorf("timeline segment %d: at most %d videos and %d audios per segment", index+1, timelineMaxSegmentMedia, timelineMaxSegmentMedia)
 		}
 		mode := strings.ToLower(strings.TrimSpace(spec.Mode))
-		if mode == "ti2v" {
-			mode = "i2v"
+		switch mode {
+		case "default":
+			mode = "ti2v"
+		case "vi2v", "edit":
+			mode = "v2v"
+		case "ref":
+			mode = "r2v"
+		case "auto":
+			mode = ""
 		}
 		if mode == "" {
 			switch {
-			case video >= 0:
+			case len(videos) > 0:
 				mode = "rv2v"
 			case len(images) > 0:
 				mode = "r2v"
@@ -122,14 +145,17 @@ func PlanTimeline(prompt string, specs []TimelineSegmentSpec, fallbackSeconds fl
 		if !timelineModes[mode] {
 			return nil, requestErrorf("timeline segment %d has unknown mode %q", index+1, spec.Mode)
 		}
-		if (mode == "v2v" || mode == "rv2v") && video < 0 {
+		if mode == "r2v" && len(videos) > 0 {
+			mode = "rv2v"
+		}
+		if (mode == "v2v" || mode == "rv2v") && len(videos) == 0 {
 			if videoCount == 0 {
 				return nil, requestErrorf("timeline segment %d (%s) needs a video", index+1, strings.ToUpper(mode))
 			}
-			video = 0
+			videos = []int{0}
 		}
 		switch mode {
-		case "t2v", "l2v":
+		case "t2v":
 			images = nil
 		case "i2v":
 			if len(images) == 0 {
@@ -141,6 +167,10 @@ func PlanTimeline(prompt string, specs []TimelineSegmentSpec, fallbackSeconds fl
 				return nil, requestErrorf("timeline segment %d (FL2V) needs two images", index+1)
 			}
 			images = images[:2]
+		case "l2v":
+			if len(images) == 0 {
+				return nil, requestErrorf("timeline segment %d (L2V) needs an image for its last frame", index+1)
+			}
 		}
 		continuity := strings.ToLower(strings.TrimSpace(spec.Continuity))
 		if continuity == "" {
@@ -155,9 +185,18 @@ func PlanTimeline(prompt string, specs []TimelineSegmentSpec, fallbackSeconds fl
 		if !timelineContinuity[continuity] {
 			return nil, requestErrorf("timeline segment %d has unknown continuity %q", index+1, spec.Continuity)
 		}
-		out = append(out, TimelineSegment{Prompt: spec.Prompt, Seconds: seconds, Mode: mode, Continuity: continuity, Images: images, Video: video})
+		out = append(out, TimelineSegment{Prompt: spec.Prompt, Seconds: seconds, Mode: mode, Continuity: continuity, Images: images, Videos: videos, Audios: audios})
 	}
 	return out, nil
+}
+
+func checkTimelineMedia(segment int, kind string, chosen []int, count int) error {
+	for _, item := range chosen {
+		if item < 0 || item >= count {
+			return requestErrorf("timeline segment %d uses %s %d, but only %d %s(s) were sent", segment+1, kind, item+1, count, kind)
+		}
+	}
+	return nil
 }
 
 // TimelineSeconds is the length of the finished video (what is billed).
@@ -239,7 +278,23 @@ func BuildTrackData(template string, segments []TimelineSegment, media TimelineM
 	}
 
 	taskSegments := make([]any, 0, len(segments))
-	videoSegments := make([]any, 0)
+	// The k-th video / audio of every part goes on the k-th video / audio
+	// track, so <Video k> / <Audio k> in a part's prompt is its k-th file.
+	videoLanes := make([][]any, 0)
+	audioLanes := make([][]any, 0)
+	addLane := func(lanes [][]any, lane int, segment any) [][]any {
+		for len(lanes) <= lane {
+			lanes = append(lanes, make([]any, 0))
+		}
+		lanes[lane] = append(lanes[lane], segment)
+		return lanes
+	}
+	mediaSegment := func(kind, name string, start, end int) map[string]any {
+		return map[string]any{
+			"id": newTimelineID(), "start_frame": start, "end_frame": end, "color": "var(--primary)",
+			"content": map[string]any{"media_type": kind, "source_type": "input", "file_path": name, "file_name": name, "muted": kind == "video", "volume_db": 0},
+		}
+	}
 	frame := 0
 	for _, segment := range segments {
 		length := int(math.Round(segment.Seconds * frameRate))
@@ -259,7 +314,9 @@ func BuildTrackData(template string, segments []TimelineSegment, media TimelineM
 			name := media.Images[index]
 			images = append(images, map[string]any{"id": newTimelineID(), "source_type": "input", "file_path": name, "file_name": name})
 		}
-		prompt := segment.Prompt
+		// @imageN in a part means the N-th file SENT; H3 numbers <Picture n> by
+		// the part's own files, so renumber before the template renders tags.
+		prompt := renumberSegmentTags(segment)
 		if renderPrompt != nil {
 			prompt = renderPrompt(prompt)
 		}
@@ -270,32 +327,49 @@ func BuildTrackData(template string, segments []TimelineSegment, media TimelineM
 				"ref_image_size": refSize, "images": images, "muted": false, "volume_db": 0, "user_prompt": prompt,
 			},
 		})
-		if segment.Video >= 0 {
-			name := media.Videos[segment.Video]
-			videoSegments = append(videoSegments, map[string]any{
-				"id": newTimelineID(), "start_frame": start, "end_frame": end, "color": "var(--primary)",
-				"content": map[string]any{"media_type": "video", "source_type": "input", "file_path": name, "file_name": name, "muted": true, "volume_db": 0},
-			})
+		for lane, index := range segment.Videos {
+			videoLanes = addLane(videoLanes, lane, mediaSegment("video", media.Videos[index], start, end))
+		}
+		for lane, index := range segment.Audios {
+			audioLanes = addLane(audioLanes, lane, mediaSegment("audio", media.Audios[index], start, end))
 		}
 	}
 	taskTrack["segments"] = taskSegments
 
 	nextTracks := []any{taskTrack}
-	if videoTrack := findTrack(tracks, "video"); videoTrack != nil || len(videoSegments) > 0 {
-		if videoTrack == nil {
-			videoTrack = map[string]any{"id": newTimelineID(), "name": "Video 0", "type": "video", "color": "var(--primary)", "muted": false, "solo": false, "volume_db": 0, "locked": false}
-		}
-		videoTrack["segments"] = videoSegments
-		nextTracks = append(nextTracks, videoTrack)
+	videoTemplate := findTrack(tracks, "video")
+	if videoTemplate != nil && len(videoLanes) == 0 {
+		// Keep the stored (now empty) video track so the graph keeps its shape.
+		videoLanes = append(videoLanes, make([]any, 0))
 	}
-	if len(media.Audios) > 0 {
+	for lane, laneSegments := range videoLanes {
+		track := map[string]any{"color": "var(--primary)", "muted": false, "solo": false, "volume_db": 0, "locked": false}
+		for key, value := range videoTemplate {
+			track[key] = value
+		}
+		track["id"], track["name"], track["type"], track["segments"] = newTimelineID(), "Video "+strconv.Itoa(lane), "video", laneSegments
+		nextTracks = append(nextTracks, track)
+	}
+	usesSegmentAudio := false
+	for _, segment := range segments {
+		usesSegmentAudio = usesSegmentAudio || segment.Audios != nil
+	}
+	for lane, laneSegments := range audioLanes {
+		nextTracks = append(nextTracks, map[string]any{
+			"id": newTimelineID(), "name": "Audio " + strconv.Itoa(lane), "type": "audio", "color": "var(--primary)", "muted": false, "solo": false,
+			"volume_db": 0, "locked": false, "audio_locked": false, "segments": laneSegments,
+		})
+	}
+	// The first audio as the soundtrack of the whole video (lip-sync), or -
+	// when no part chose its own audio - as a voice reference for every part.
+	if len(media.Audios) > 0 && (media.AudioLock || !usesSegmentAudio) {
 		name := media.Audios[0]
 		content := map[string]any{"media_type": "audio", "source_type": "input", "file_path": name, "file_name": name, "muted": false, "volume_db": 0}
 		if !media.AudioLock {
 			content["shared_reference"] = true
 		}
 		nextTracks = append(nextTracks, map[string]any{
-			"id": newTimelineID(), "name": "Audio 0", "type": "audio", "color": "var(--primary)", "muted": false, "solo": false,
+			"id": newTimelineID(), "name": "Audio " + strconv.Itoa(len(audioLanes)), "type": "audio", "color": "var(--primary)", "muted": false, "solo": false,
 			"volume_db": 0, "locked": false, "audio_locked": media.AudioLock,
 			"segments": []any{map[string]any{"id": newTimelineID(), "start_frame": 0, "end_frame": frame, "color": "var(--primary)", "content": content}},
 		})
@@ -350,4 +424,25 @@ func newTimelineID() string {
 	}
 	text := hex.EncodeToString(raw[:])
 	return text[0:8] + "-" + text[8:12] + "-" + text[12:16] + "-" + text[16:20] + "-" + text[20:32]
+}
+
+var segmentTagPattern = regexp.MustCompile(`@(image|video|audio)(\d+)`)
+
+// renumberSegmentTags maps @imageN / @videoN / @audioN (the N-th file SENT)
+// to that file's position within the part (@image1 = the part's first image).
+func renumberSegmentTags(segment TimelineSegment) string {
+	return segmentTagPattern.ReplaceAllStringFunc(segment.Prompt, func(tag string) string {
+		match := segmentTagPattern.FindStringSubmatch(tag)
+		global, err := strconv.Atoi(match[2])
+		if err != nil || global < 1 {
+			return tag
+		}
+		chosen := map[string][]int{"image": segment.Images, "video": segment.Videos, "audio": segment.Audios}[match[1]]
+		for position, index := range chosen {
+			if index == global-1 {
+				return "@" + match[1] + strconv.Itoa(position+1)
+			}
+		}
+		return tag
+	})
 }

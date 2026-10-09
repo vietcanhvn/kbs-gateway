@@ -61,14 +61,20 @@ cả bảng dòng thời gian là một ô chữ JSON `track_data`. Gán ô đó
 mapping (ảnh / video / audio / lời nhắc không cần gán riêng). Mỗi lượt gọi, gateway dựng lại
 `track_data` từ yêu cầu:
 
-- `metadata.segments`: `[{prompt, seconds, mode, continuity, images, video}]` - `mode` là `r2v`
-  (ảnh tham chiếu), `t2v`, `i2v` (ảnh làm khung đầu), `fl2v`, `v2v` (sửa video), `rv2v`, `l2v`;
-  `continuity` là `shot` (cảnh mới) hoặc `context` / `context_drift` (nối tiếp đoạn trước);
-  `images` là số thứ tự ảnh gửi kèm (bỏ trống = mọi ảnh), `video` là số thứ tự video.
+- `metadata.segments`: `[{prompt, seconds, mode, continuity, images, videos, audios}]`. `mode` theo
+  Easy-Media: `ti2v` (số ảnh quyết định: 0 = T2V, 1 = I2V khung đầu, 2 = FL2V đầu + cuối, 3+ = FMLF2V),
+  `t2v`, `i2v`, `fl2v`; `r2v` (ảnh tham chiếu; có video thành `rv2v`); `v2v` / `vi2v` (sửa video,
+  có ảnh thành VI2V); `l2v` (ảnh cuối của đoạn là **khung cuối** của đoạn). `continuity` là `shot`
+  (cảnh mới) hoặc `context` / `context_drift` (nối tiếp đoạn trước). `images` / `videos` / `audios`
+  là số thứ tự tệp gửi kèm (0 = tệp đầu; bỏ trống `images` = mọi ảnh); mỗi đoạn tối đa 3 video,
+  3 audio - tệp thứ k của đoạn nằm trên rãnh video / audio thứ k. Trong lời nhắc đoạn, `@image3`
+  là ảnh thứ 3 gửi đi; gateway đánh số lại theo tệp của chính đoạn (`<Picture 1>`…).
 - Không có `segments` thì gateway đọc dòng đánh dấu trong lời nhắc:
   `[Đoạn 2 – 8s – TI2V – context] …`; không có nữa thì cả lời nhắc là một đoạn.
-- Audio đầu tiên: mặc định là **nhạc / tiếng của cả video** (khoá tiếng, nhân vật nhép theo);
-  `metadata.audio_lock: false` thì chỉ là giọng tham chiếu.
+- Audio chọn theo đoạn chỉ phát trong khoảng của đoạn đó. Khi không đoạn nào chọn audio, audio
+  đầu tiên mặc định là **nhạc / tiếng của cả video** (khoá tiếng, nhân vật nhép theo);
+  `metadata.audio_lock: false` thì chỉ là giọng tham chiếu. `audio_lock: true` luôn thêm audio
+  đầu làm nhạc cả video.
 - Tính tiền theo **tổng số giây các đoạn**. Mặc định đoạn 1 là `shot`, các đoạn sau `context`;
   có ảnh thì `r2v`, không thì `t2v`. Mỗi đoạn 1–20 giây, tối đa 24 đoạn.
 

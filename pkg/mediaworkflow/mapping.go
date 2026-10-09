@@ -98,7 +98,7 @@ func (m InputMapping) MediaCapacity() map[string]int {
 		// Timeline workflows place media per segment (ComfyUI-Easy-Media).
 		capacity[RoleImage] = 24
 		capacity[RoleVideo] = 6
-		capacity[RoleAudio] = 1
+		capacity[RoleAudio] = 6
 	}
 	for _, binding := range m.Inputs {
 		switch binding.Role {

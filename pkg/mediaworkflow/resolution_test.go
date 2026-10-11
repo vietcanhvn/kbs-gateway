@@ -25,7 +25,10 @@ func TestResolutionRolesScaleTheWorkflowDefault(t *testing.T) {
 	}
 	assert.Equal(t, map[string]any{"29": 1.0, "22": 0.2, "213": int64(1280)}, values("720p"), "720p keeps the workflow's own size")
 	assert.Equal(t, map[string]any{"29": 2.25, "22": 0.45, "213": int64(1920)}, values("1080p"))
-	assert.Equal(t, map[string]any{"29": 0.25, "22": 0.05, "213": int64(640)}, values("360p"))
+	// ComfyUI rejects megapixels below 0.1: the 0.2 MP pass floors at 0.1 (was 0.05 / 0.09 -> RunningHub 433).
+	assert.Equal(t, map[string]any{"29": 0.25, "22": 0.1, "213": int64(640)}, values("360p"))
+	assert.Equal(t, 0.1, values("480p")["22"], "480p: 0.2*0.44=0.09 floors to 0.1")
+	assert.Equal(t, 0.44, values("480p")["29"])
 	assert.Equal(t, 4.0, values("4k")["29"], "clamped to the binding maximum")
 	assert.Empty(t, values(""), "no tier: leave the workflow as it is")
 	assert.True(t, mapping.HasResolutionRole())

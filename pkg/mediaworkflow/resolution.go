@@ -16,6 +16,10 @@ const (
 	RoleLongEdge   = "long_edge"
 )
 
+// minWorkflowMegapixels is the smallest megapixels value ComfyUI's resolution
+// nodes accept.
+const minWorkflowMegapixels = 0.1
+
 // Short side of a 16:9 frame at each tier the clients send.
 var resolutionTierShortSide = map[string]float64{
 	"360p":  360,
@@ -102,6 +106,13 @@ func resolutionValue(binding InputBinding, req MediaRequest) (any, bool) {
 		return nil, false
 	}
 	value = clamp(value, binding.Min, binding.Max)
+	// ComfyUI's ResolutionSelector rejects megapixels below 0.1 ("Value 0.09
+	// smaller than min of 0.1"): H3 Action's 0.2 MP preview pass scaled to 480p
+	// lands on 0.09 and RunningHub refuses the whole task. Floor it when the
+	// binding sets no min of its own.
+	if binding.Role == RoleMegapixels && binding.Min == nil && value < minWorkflowMegapixels {
+		value = minWorkflowMegapixels
+	}
 	if binding.Role == RoleMegapixels && binding.ValueType != "int" {
 		return value, true // megapixels are fractional (0.92 MP)
 	}

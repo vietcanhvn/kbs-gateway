@@ -158,3 +158,19 @@ func TestParseLink(t *testing.T) {
 		assert.Equal(t, tt.want, got, tt.link)
 	}
 }
+
+func TestClientCreateTaskSendsCustomWorkflowJSON(t *testing.T) {
+	client := newTestServer(t, func(path string, body map[string]any, _ *http.Request) string {
+		assert.Equal(t, `{"1":{"class_type":"SaveImage","inputs":{}}}`, body["workflow"])
+		return `{"code":0,"msg":"success","data":{"taskId":"1","taskStatus":"QUEUED"}}`
+	})
+	_, err := client.CreateTask(context.Background(), CreateTaskRequest{WorkflowID: "1", Workflow: `{"1":{"class_type":"SaveImage","inputs":{}}}`})
+	require.NoError(t, err)
+	client = newTestServer(t, func(path string, body map[string]any, _ *http.Request) string {
+		_, has := body["workflow"]
+		assert.False(t, has)
+		return `{"code":0,"msg":"success","data":{"taskId":"1","taskStatus":"QUEUED"}}`
+	})
+	_, err = client.CreateTask(context.Background(), CreateTaskRequest{WorkflowID: "1"})
+	require.NoError(t, err)
+}

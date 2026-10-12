@@ -23,6 +23,12 @@ type InputMapping struct {
 	// nodes it feeds, so the sample file saved in the workflow is not used;
 	// "keep" leaves the workflow's own file in place.
 	UnusedMedia string `json:"unused_media,omitempty"`
+	// SendWorkflow runs the stored API JSON instead of the graph saved on
+	// RunningHub (RunningHub's "workflow" field; nodeInfoList still applies).
+	// One all-in-one RunningHub workflow can then back several models, each
+	// with the API JSON of only its own area (text-to-image, edit...),
+	// without saving a copy of the workflow per area.
+	SendWorkflow bool `json:"send_workflow,omitempty"`
 }
 
 // InputBinding binds one request role to one node input.

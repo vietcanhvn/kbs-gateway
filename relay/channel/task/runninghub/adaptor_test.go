@@ -413,3 +413,26 @@ func TestTimelineWorkflowBuildsTrackDataAndBillsTheSegments(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(task.NodeInfoList[0].FieldValue.(string)), &data))
 	assert.EqualValues(t, 336, data["total_length"])
 }
+
+func TestBuildTaskSendsTheStoredWorkflowOnlyWhenAsked(t *testing.T) {
+	apiJSON := `{"1070":{"class_type":"easy prompt","inputs":{"text":"x"}},"1072":{"class_type":"SaveImage","inputs":{"images":["814",0]}}}`
+	record := &model.MediaWorkflow{
+		ModelName: "rh-qwen21", WorkflowID: "2109524748351197186", ApiJSON: apiJSON,
+		InputMapping: `{"inputs":[{"role":"prompt","node_id":"1070","field":"text"}],"send_workflow":true}`,
+	}
+	workflow, err := WorkflowFromRecord(record)
+	require.NoError(t, err)
+	task, err := workflow.BuildTask(context.Background(), nil, Inputs{Prompt: "a cat"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, apiJSON, task.Workflow, "one area of an all-in-one workflow runs as its own API JSON")
+	assert.Equal(t, "2109524748351197186", task.WorkflowID)
+	require.NotEmpty(t, task.NodeInfoList)
+	assert.Equal(t, "a cat", task.NodeInfoList[0].FieldValue)
+
+	record.InputMapping = `{"inputs":[{"role":"prompt","node_id":"1070","field":"text"}]}`
+	workflow, err = WorkflowFromRecord(record)
+	require.NoError(t, err)
+	task, err = workflow.BuildTask(context.Background(), nil, Inputs{Prompt: "a cat"}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, task.Workflow, "without send_workflow RunningHub runs its saved graph")
+}

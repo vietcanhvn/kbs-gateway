@@ -32,6 +32,9 @@ type Workflow struct {
 	// nodes is the stored API JSON, used to find what an unused media
 	// loader feeds so it can be unwired.
 	nodes map[string]map[string]any
+	// apiJSON is the stored API JSON itself, sent to RunningHub when the
+	// mapping asks for it (send_workflow).
+	apiJSON string
 }
 
 // LoadWorkflow returns the enabled RunningHub workflow registered for a model.
@@ -70,6 +73,7 @@ func WorkflowFromRecord(record *model.MediaWorkflow) (*Workflow, error) {
 	}
 	if nodes, err := mediaworkflow.ParseAPIWorkflow([]byte(record.ApiJSON)); err == nil {
 		workflow.nodes = nodes
+		workflow.apiJSON = strings.TrimSpace(record.ApiJSON)
 	}
 	workflow.DefaultSeconds = defaultDuration(workflow.nodes, workflow.Mapping)
 	return workflow, nil
@@ -237,7 +241,14 @@ func (w *Workflow) BuildTask(ctx context.Context, client *rh.Client, in Inputs, 
 	for _, override := range overrides {
 		nodeInfoList = append(nodeInfoList, rh.NodeInfo{NodeID: override.NodeID, FieldName: override.FieldName, FieldValue: override.FieldValue})
 	}
-	return rh.CreateTaskRequest{WorkflowID: w.WorkflowID, NodeInfoList: nodeInfoList, InstanceType: w.Mapping.InstanceType}, nil
+	task := rh.CreateTaskRequest{WorkflowID: w.WorkflowID, NodeInfoList: nodeInfoList, InstanceType: w.Mapping.InstanceType}
+	if w.Mapping.SendWorkflow {
+		if w.apiJSON == "" {
+			return rh.CreateTaskRequest{}, fmt.Errorf("workflow %q: send_workflow is set but the stored API JSON is empty or invalid", w.ModelName)
+		}
+		task.Workflow = w.apiJSON
+	}
+	return task, nil
 }
 
 // UpstreamTaskID packs the RunningHub task ID with the output preference so

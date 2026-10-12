@@ -248,6 +248,9 @@ type CreateTaskRequest struct {
 	NodeInfoList []NodeInfo
 	InstanceType string
 	WebhookURL   string
+	// Workflow is a full API-format workflow JSON run instead of the saved
+	// graph of WorkflowID (optional).
+	Workflow string
 }
 
 type CreateTaskResult struct {
@@ -270,6 +273,9 @@ func (c *Client) CreateTask(ctx context.Context, request CreateTaskRequest) (*Cr
 	}
 	if request.WebhookURL != "" {
 		payload["webhookUrl"] = request.WebhookURL
+	}
+	if strings.TrimSpace(request.Workflow) != "" {
+		payload["workflow"] = request.Workflow
 	}
 	env, err := c.post(ctx, "create task", "/task/openapi/create", payload)
 	if err != nil {

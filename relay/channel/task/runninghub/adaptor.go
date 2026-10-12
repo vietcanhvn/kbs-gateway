@@ -224,6 +224,9 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if task.InstanceType != "" {
 		payload["instanceType"] = task.InstanceType
 	}
+	if task.Workflow != "" {
+		payload["workflow"] = task.Workflow
+	}
 	body, err := common.Marshal(payload)
 	if err != nil {
 		return nil, err

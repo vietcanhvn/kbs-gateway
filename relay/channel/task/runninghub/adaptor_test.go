@@ -170,6 +170,8 @@ func TestSubmitBuildsNodeInfoListFromDCMediaRequest(t *testing.T) {
 	var sent map[string]any
 	require.NoError(t, common.Unmarshal(payload, &sent))
 	assert.Equal(t, "2108242199912755201", sent["workflowId"])
+	_, hasWorkflow := sent["workflow"]
+	assert.False(t, hasWorkflow, "without send_workflow RunningHub runs its saved graph")
 	assert.Equal(t, []any{
 		map[string]any{"nodeId": "263", "fieldName": "text", "fieldValue": "trigger\n<Picture 1> hugs <Picture 2>"},
 		map[string]any{"nodeId": "51", "fieldName": "image", "fieldValue": "api/upload-1-ksb-input.png"},
@@ -435,4 +437,33 @@ func TestBuildTaskSendsTheStoredWorkflowOnlyWhenAsked(t *testing.T) {
 	task, err = workflow.BuildTask(context.Background(), nil, Inputs{Prompt: "a cat"}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, task.Workflow, "without send_workflow RunningHub runs its saved graph")
+}
+
+func TestSubmitSendsTheStoredWorkflowForSendWorkflowModels(t *testing.T) {
+	setupRegistryDB(t)
+	apiJSON := `{"1070":{"class_type":"easy prompt","inputs":{"text":"x"}},"1072":{"class_type":"SaveImage","inputs":{"images":["814",0]}}}`
+	mappingJSON, _ := common.Marshal(mediaworkflow.InputMapping{Inputs: []mediaworkflow.InputBinding{{Role: mediaworkflow.RolePrompt, NodeID: "1070", Field: "text"}}, SendWorkflow: true})
+	record := &model.MediaWorkflow{
+		ModelName: "rh-qwen-test", WorkflowID: "2109524748351197186", MediaKind: mediaworkflow.KindImage,
+		Executor: model.MediaWorkflowExecutorRunningHub, ApiJSON: apiJSON, InputMapping: string(mappingJSON),
+		OutputNodes: `["1072"]`, Enabled: true,
+	}
+	require.NoError(t, record.Insert())
+	body, _ := common.Marshal(map[string]any{"model": "rh-qwen-test", "prompt": "a dog"})
+	c, _ := newTaskContext(t, string(body))
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "rh-qwen-test",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public_2"},
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelBaseUrl: "http://unused", ApiKey: "rh-key", UpstreamModelName: "rh-qwen-test"},
+	}
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload, _ := io.ReadAll(reader)
+	var sent map[string]any
+	require.NoError(t, common.Unmarshal(payload, &sent))
+	assert.Equal(t, apiJSON, sent["workflow"], "the area's own API JSON goes with the task")
+	assert.Equal(t, "2109524748351197186", sent["workflowId"])
 }

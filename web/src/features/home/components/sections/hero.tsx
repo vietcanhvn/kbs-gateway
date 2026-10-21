@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ReactNode } from 'react'
 import { CherryStudio } from '@lobehub/icons'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, BookOpen } from 'lucide-react'
@@ -30,6 +31,49 @@ interface HeroProps {
   className?: string
   isAuthenticated?: boolean
 }
+
+// Ứng dụng của KBS: ô vuông nền tối, nét xanh ngọc - cùng bộ biểu tượng của trang kimbox.studio.
+const KBS_APP_GLYPHS: Record<string, ReactNode> = {
+  voice: <path d='M4 10v4M8 6.5v11M12 3.5v17M16 6.5v11M20 10v4' />,
+  api: <path d='M8 8 4 12l4 4M16 8l4 4-4 4M13.5 5l-3 14' />,
+  book: (
+    <>
+      <path d='M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z' />
+      <path d='M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5' />
+    </>
+  ),
+  script: (
+    <>
+      <path d='M7 3h7l5 5v13H7z' />
+      <path d='M14 3v5h5M10 12h6M10 16h6' />
+    </>
+  ),
+}
+
+const KBS_APPS = [
+  { name: 'KBSVoice', href: 'https://voice.kimbox.studio', glyph: 'voice' },
+  { name: 'KBSAPI', href: 'https://api.kimbox.studio', glyph: 'api' },
+  { name: 'KBSBook', href: 'https://book.kimbox.studio', glyph: 'book' },
+  { name: 'KBSScript', href: 'https://script.kimbox.studio', glyph: 'script' },
+]
+
+const KbsAppIcon = ({ glyph }: { glyph: string }) => (
+  <span className='flex size-6 shrink-0 items-center justify-center rounded-md bg-slate-900 ring-1 ring-teal-500/40'>
+    <svg
+      xmlns='http://www.w3.org/2000/svg'
+      viewBox='0 0 24 24'
+      className='size-4'
+      fill='none'
+      stroke='#2dd4bf'
+      strokeWidth='2'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+      aria-hidden='true'
+    >
+      {KBS_APP_GLYPHS[glyph]}
+    </svg>
+  </span>
+)
 
 // Stylized three-dots indicator representing "More"
 const MoreIcon = () => (
@@ -185,6 +229,20 @@ export function Hero(props: HeroProps) {
               </p>
             </div>
             <div className='flex flex-wrap items-center gap-3'>
+              {/* Ứng dụng của KBS */}
+              {KBS_APPS.map((app) => (
+                <a
+                  key={app.name}
+                  href={app.href}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='group border-border/40 bg-muted/15 text-foreground/80 hover:border-border hover:bg-muted/30 hover:text-foreground flex items-center gap-3 rounded-full border px-5 py-2.5 text-sm font-medium shadow-[0_1px_2.5px_rgba(0,0,0,0.01)] backdrop-blur-xs transition-all duration-300 hover:scale-[1.02]'
+                >
+                  <KbsAppIcon glyph={app.glyph} />
+                  <span>{app.name}</span>
+                </a>
+              ))}
+
               {/* Cherry Studio */}
               <a
                 href='https://cherry-ai.com'

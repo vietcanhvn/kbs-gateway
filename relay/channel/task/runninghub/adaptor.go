@@ -450,6 +450,12 @@ func (a *TaskAdaptor) CancelTask(ctx context.Context, baseURL, key, upstreamTask
 	// Report success only once RunningHub no longer runs the task.
 	status, err = client.TaskStatus(ctx, taskID)
 	if err != nil {
+		// RunningHub xoá tác vụ vừa huỷ (nhất là tác vụ đang xếp hàng): hỏi lại trả "task not found" - đã huỷ xong.
+		// 21/10: báo 502 "task_cancellation_failed" trong khi RunningHub đã huỷ, người dùng không được hoàn tiền.
+		var apiErr *rh.APIError
+		if errors.As(err, &apiErr) && (apiErr.Code == rh.CodeTaskNotFound || apiErr.Code == rh.CodeAPITaskNotFound) {
+			return nil
+		}
 		return err
 	}
 	if status == rh.StatusQueued || status == rh.StatusRunning {

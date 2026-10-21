@@ -38,6 +38,8 @@ type fakeRunningHub struct {
 	statuses  []string // returned in order by /status; the last one repeats
 	outputs   string   // /outputs response once the task is finished
 	cancelled bool
+	// goneAfterCancel: after /cancel, /status answers 807 "task not found" (RunningHub drops a cancelled queued task).
+	goneAfterCancel bool
 }
 
 func (f *fakeRunningHub) handler(t *testing.T) http.HandlerFunc {
@@ -63,6 +65,10 @@ func (f *fakeRunningHub) handler(t *testing.T) http.HandlerFunc {
 			f.created = append(f.created, body)
 			_, _ = io.WriteString(w, `{"code":0,"msg":"success","data":{"taskId":1910246754753896450,"taskStatus":"QUEUED"}}`)
 		case "/task/openapi/status":
+			if f.cancelled && f.goneAfterCancel {
+				_, _ = io.WriteString(w, `{"code":807,"msg":"APIKEY_TASK_NOT_FOUND","data":null}`)
+				return
+			}
 			status := f.statuses[0]
 			if len(f.statuses) > 1 {
 				f.statuses = f.statuses[1:]
@@ -332,6 +338,16 @@ func TestPollingFailureRefundsQuota(t *testing.T) {
 
 func TestCancelTaskConfirmsWithRunningHub(t *testing.T) {
 	fake := &fakeRunningHub{statuses: []string{"QUEUED"}}
+	server := httptest.NewServer(fake.handler(t))
+	defer server.Close()
+	adaptor := &TaskAdaptor{httpClient: server.Client()}
+	require.NoError(t, adaptor.CancelTask(context.Background(), server.URL, "rh-key", "1910246754753896450|video|264", ""))
+	assert.True(t, fake.cancelled)
+}
+
+// 21/10: RunningHub huỷ xong thì xoá luôn tác vụ đang xếp hàng; lần hỏi lại trả 807 "task not found". Đó là đã huỷ.
+func TestCancelTaskTreatsAVanishedTaskAsCancelled(t *testing.T) {
+	fake := &fakeRunningHub{statuses: []string{"QUEUED"}, goneAfterCancel: true}
 	server := httptest.NewServer(fake.handler(t))
 	defer server.Close()
 	adaptor := &TaskAdaptor{httpClient: server.Client()}

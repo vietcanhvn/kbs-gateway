@@ -57,9 +57,12 @@ func RelayTaskCancel(c *gin.Context) *dto.TaskError {
 	if baseURL == "" {
 		baseURL = constant.ChannelBaseURLs[channelModel.Type]
 	}
+	// Kênh nhiều key: huỷ bằng đúng key đã gửi tác vụ (như vòng hỏi tiến độ, service/task_polling.go). Key chung của kênh
+	// làm RunningHub báo "task not found (APIKEY_TASK_NOT_FOUND)" - 21/10 bấm Huỷ ở KimStudio mà RunningHub vẫn chạy.
+	key := cancelKey(channelModel.Key, task.PrivateData.Key)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
-	if err := canceller.CancelTask(ctx, baseURL, channelModel.Key, task.GetUpstreamTaskID(), channelModel.GetSetting().Proxy); err != nil {
+	if err := canceller.CancelTask(ctx, baseURL, key, task.GetUpstreamTaskID(), channelModel.GetSetting().Proxy); err != nil {
 		if errors.Is(err, channel.ErrTaskCancellationUnsupported) {
 			return service.TaskErrorWrapperLocal(err, "task_cancellation_unsupported", http.StatusNotImplemented)
 		}
@@ -83,6 +86,14 @@ func RelayTaskCancel(c *gin.Context) *dto.TaskError {
 	service.RefundTaskQuota(c.Request.Context(), task, "task cancelled")
 	c.JSON(http.StatusOK, task.ToOpenAIVideo())
 	return nil
+}
+
+// cancelKey: key dùng để huỷ một tác vụ - key đã gửi tác vụ đó nếu có, không thì key của kênh.
+func cancelKey(channelKey, taskKey string) string {
+	if strings.TrimSpace(taskKey) != "" {
+		return taskKey
+	}
+	return channelKey
 }
 
 type TaskSubmitResult struct {

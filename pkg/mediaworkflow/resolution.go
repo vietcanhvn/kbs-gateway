@@ -77,6 +77,20 @@ func (m InputMapping) ResolutionScale(tier string) float64 {
 	return math.Max(scale, 1)
 }
 
+// ResolutionPriceRatio is the price multiplier of a request's tier: the
+// workflow's measured ResolutionPrices entry when it has one (may be below 1),
+// otherwise the pixel-count scale. Workflows that cannot change their size
+// always bill 1.
+func (m InputMapping) ResolutionPriceRatio(tier string) float64 {
+	if !m.HasResolutionRole() {
+		return 1
+	}
+	if ratio, ok := m.ResolutionPrices[strings.ToLower(strings.TrimSpace(tier))]; ok && ratio > 0 && !math.IsInf(ratio, 0) {
+		return ratio
+	}
+	return m.ResolutionScale(tier)
+}
+
 // HasResolutionRole reports whether the workflow lets requests pick a resolution.
 func (m InputMapping) HasResolutionRole() bool {
 	return m.HasRole(RoleMegapixels) || m.HasRole(RoleLongEdge)

@@ -29,6 +29,12 @@ type InputMapping struct {
 	// with the API JSON of only its own area (text-to-image, edit...),
 	// without saving a copy of the workflow per area.
 	SendWorkflow bool `json:"send_workflow,omitempty"`
+	// ResolutionPrices is the measured price multiplier of each resolution
+	// tier ("480p": 0.31, "1080p": 3.2), relative to the model price. RunningHub
+	// bills machine time, which does not follow pixel count (a MiniMax H3 long
+	// take at 720p costs ~3.2x its 480p run; Real Skin 2K ~5x 720p). A tier
+	// not listed keeps the pixel-count scale (ResolutionScale, never below 1).
+	ResolutionPrices map[string]float64 `json:"resolution_prices,omitempty"`
 }
 
 // InputBinding binds one request role to one node input.
@@ -217,6 +223,14 @@ func (m InputMapping) Validate(workflow map[string]map[string]any) error {
 	}
 	if m.Billing != "" && m.Billing != "per_call" && m.Billing != "per_second" {
 		return fmt.Errorf("billing must be per_call or per_second")
+	}
+	for tier, ratio := range m.ResolutionPrices {
+		if !KnownResolution(tier) {
+			return fmt.Errorf("resolution_prices: unknown tier %q", tier)
+		}
+		if !(ratio > 0) || math.IsInf(ratio, 0) {
+			return fmt.Errorf("resolution_prices: tier %q needs a multiplier above 0", tier)
+		}
 	}
 	return nil
 }

@@ -126,10 +126,11 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		billing["seconds"] = float64(BilledSeconds(workflow.Mapping, inputs.Duration, workflow.DefaultSeconds))
 	}
 	// Workflows that render the requested resolution: the per-second price is
-	// the workflow default (720p); larger tiers cost more by pixel count.
-	// Smaller tiers keep the 720p price (RunningHub time does not shrink as fast).
-	if scale := workflow.Mapping.ResolutionScale(inputs.Resolution); scale > 1 {
-		billing["resolution"] = math.Round(scale*100) / 100
+	// the workflow default (720p). A tier the workflow has a measured multiplier
+	// for (resolution_prices) uses it, smaller tiers included; otherwise larger
+	// tiers cost more by pixel count and smaller ones keep the 720p price.
+	if ratio := workflow.Mapping.ResolutionPriceRatio(inputs.Resolution); ratio != 1 {
+		billing["resolution"] = math.Round(ratio*1000) / 1000
 	}
 	return billing
 }

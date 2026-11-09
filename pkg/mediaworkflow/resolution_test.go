@@ -41,6 +41,30 @@ func TestResolutionRolesScaleTheWorkflowDefault(t *testing.T) {
 	assert.Equal(t, 1.0, ResolutionPixelRatio("weird"))
 }
 
+// RunningHub bills machine time, not pixels: a workflow can carry its measured
+// multiplier per tier (MiniMax H3 long take 480p ~0.31x of 720p, 1080p ~3x).
+func TestResolutionPricesOverrideThePixelScale(t *testing.T) {
+	maxMP := 2.25
+	mapping := InputMapping{
+		Inputs:           []InputBinding{{Role: RoleMegapixels, NodeID: "29", Field: "resolution.megapixels", ValueType: "float", Value: 1.0, Max: &maxMP}},
+		ResolutionPrices: map[string]float64{"480p": 0.31, "1080p": 3.2},
+	}
+	require.NoError(t, mapping.Validate(nil))
+	assert.Equal(t, 0.31, mapping.ResolutionPriceRatio("480p"), "measured tier below 720p bills less")
+	assert.Equal(t, 3.2, mapping.ResolutionPriceRatio("1080P "), "tier names ignore case and spaces")
+	assert.Equal(t, 1.0, mapping.ResolutionPriceRatio("720p"))
+	assert.Equal(t, 1.0, mapping.ResolutionPriceRatio("360p"), "unlisted smaller tier keeps the 720p price")
+	assert.InDelta(t, 2.25, mapping.ResolutionPriceRatio("4k"), 0.01, "unlisted larger tier: pixel scale, capped by the binding max")
+	assert.Equal(t, 1.0, mapping.ResolutionPriceRatio(""), "no tier: workflow default")
+	assert.Equal(t, 1.0, InputMapping{ResolutionPrices: map[string]float64{"480p": 0.3}}.ResolutionPriceRatio("480p"), "no resolution input: the size never changes")
+
+	bad := mapping
+	bad.ResolutionPrices = map[string]float64{"8k": 2}
+	assert.ErrorContains(t, bad.Validate(nil), "unknown tier")
+	bad.ResolutionPrices = map[string]float64{"480p": 0}
+	assert.ErrorContains(t, bad.Validate(nil), "above 0")
+}
+
 func TestAnalyzeFindsMegapixelsInputs(t *testing.T) {
 	api := []byte(`{
 "15":{"class_type":"ResolutionSelector","inputs":{"aspect_ratio":"16:9 (Widescreen)","megapixels":["27",0]}},

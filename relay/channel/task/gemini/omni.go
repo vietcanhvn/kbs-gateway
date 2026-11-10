@@ -262,6 +262,7 @@ type OmniInteraction struct {
 	Usage  *struct {
 		TotalInputTokens       int `json:"total_input_tokens"`
 		TotalOutputTokens      int `json:"total_output_tokens"`
+		TotalThoughtTokens     int `json:"total_thought_tokens"`
 		OutputTokensByModality []struct {
 			Modality string `json:"modality"`
 			Tokens   int    `json:"tokens"`
@@ -286,14 +287,16 @@ func (i *OmniInteraction) VideoOutputTokens() int {
 	return total
 }
 
-// BilledVideoTokens: token video ra cộng token vào và chữ ra quy đổi theo giá (Google tính cả ba). 0 khi chưa có video.
+// BilledVideoTokens: token video ra cộng token vào và chữ ra quy đổi theo giá (Google tính cả ba). Chữ ra = phần
+// total_output_tokens ngoài video + total_thought_tokens (suy luận ghi riêng, không nằm trong total_output_tokens -
+// 10/11: lượt 360p 4 s có total_output 7.724 = đúng video, 402 token suy luận tách riêng). 0 khi chưa có video.
 func (i *OmniInteraction) BilledVideoTokens(spec OmniSpec) float64 {
 	video := float64(i.VideoOutputTokens())
 	if video <= 0 || spec.VideoOutputPrice <= 0 {
 		return 0
 	}
 	input := float64(i.Usage.TotalInputTokens)
-	text := math.Max(0, float64(i.Usage.TotalOutputTokens)-video)
+	text := math.Max(0, float64(i.Usage.TotalOutputTokens)-video) + float64(i.Usage.TotalThoughtTokens)
 	return video + input*spec.InputPrice/spec.VideoOutputPrice + text*spec.TextOutputPrice/spec.VideoOutputPrice
 }
 

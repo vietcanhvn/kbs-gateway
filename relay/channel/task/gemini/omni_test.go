@@ -396,13 +396,13 @@ func TestOmni12SpecDurationAndFullTokenBilling(t *testing.T) {
 	require.NoError(t, common.Unmarshal(out, &parsed))
 	assert.NotContains(t, parsed.ResponseFormat, "duration", "retry without duration when Google rejects it")
 
-	// Một lượt thật (10/11): 7.724 token video ra, 6.832 token vào (video tham chiếu), 8.341 token ra tổng.
+	// Một lượt thật (10/11): 7.724 token video ra, 6.832 token vào (video tham chiếu), 8.341 token ra tổng, 343 suy luận.
 	var interaction OmniInteraction
-	require.NoError(t, common.Unmarshal([]byte(`{"status":"completed","usage":{"total_input_tokens":6832,"total_output_tokens":8341,"output_tokens_by_modality":[{"modality":"video","tokens":7724}]}}`), &interaction))
+	require.NoError(t, common.Unmarshal([]byte(`{"status":"completed","usage":{"total_input_tokens":6832,"total_output_tokens":8341,"total_thought_tokens":343,"output_tokens_by_modality":[{"modality":"video","tokens":7724}]}}`), &interaction))
 	legacy := interaction.BilledVideoTokens(OmniSpecFor("gemini-omni-1.1-flash"))
-	assert.InDelta(t, 7724+6832*1.5/17.5+617*9/17.5, legacy, 1e-6)
+	assert.InDelta(t, 7724+6832*1.5/17.5+(617+343)*9/17.5, legacy, 1e-6)
 	billed := interaction.BilledVideoTokens(spec)
-	assert.InDelta(t, 7724+6832*1.5/12+617*9/12.0, billed, 1e-6)
+	assert.InDelta(t, 7724+6832*1.5/12+(617+343)*9/12.0, billed, 1e-6)
 	assert.Greater(t, billed/7724, 1.16, "inputs and text add ~17% on top of the video tokens")
 	var noVideo OmniInteraction
 	require.NoError(t, common.Unmarshal([]byte(`{"status":"completed","usage":{"total_input_tokens":500}}`), &noVideo))

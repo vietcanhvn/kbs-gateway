@@ -175,16 +175,20 @@ func RelayGeminiInteraction(c *gin.Context) {
 	// không có resolution. Không bao giờ bỏ delivery "uri": phản hồi được lưu
 	// vào CSDL nên không được chứa video base64.
 	var upstreamBodies [][]byte
-	for _, drop := range [][]string{nil, {"resolution"}} {
+	for _, drop := range [][]string{nil, {"duration"}, {"duration", "resolution"}} {
 		upstreamBody, err := taskgemini.BuildOmniUpstreamBody(body, info.UpstreamModelName, previousGoogleID, drop...)
 		if err != nil {
 			omniError(c, http.StatusBadRequest, err.Error())
 			return
 		}
+		// Bản không nhận duration (Omni 1.1) đã bỏ sẵn trường đó: không gửi lại một thân giống hệt.
+		if n := len(upstreamBodies); n > 0 && string(upstreamBodies[n-1]) == string(upstreamBody) {
+			continue
+		}
 		upstreamBodies = append(upstreamBodies, upstreamBody)
 	}
 
-	// Giá: ModelPrice = USD mỗi giây video 720p; trừ trước mức tối đa 10 s.
+	// Giá: ModelPrice = USD mỗi giây video 720p.
 	priceData, err := helper.ModelPriceHelperPerCall(c, info)
 	if err != nil {
 		omniError(c, http.StatusBadRequest, err.Error())
@@ -196,9 +200,11 @@ func RelayGeminiInteraction(c *gin.Context) {
 	}
 	resolutionRatio, _ := taskgemini.OmniResolutionRatio(req.Resolution)
 	groupRatio := priceData.GroupRatioInfo.GroupRatio
-	preQuota, clamp := taskgemini.OmniQuota(priceData.ModelPrice, groupRatio, taskgemini.OmniPreChargeSeconds, resolutionRatio)
+	// Trừ trước số giây yêu cầu (Omni 1.2) hoặc lượt dài nhất của mô hình; quyết toán theo usage sau.
+	preSeconds := taskgemini.OmniPreChargeSecondsFor(taskgemini.OmniSpecFor(info.UpstreamModelName), req.Duration)
+	preQuota, clamp := taskgemini.OmniQuota(priceData.ModelPrice, groupRatio, preSeconds, resolutionRatio)
 	info.PriceData = priceData
-	info.PriceData.AddOtherRatio("seconds", taskgemini.OmniPreChargeSeconds)
+	info.PriceData.AddOtherRatio("seconds", preSeconds)
 	info.PriceData.AddOtherRatio("resolution", resolutionRatio)
 	if clamp != nil {
 		info.QuotaClamp = clamp
@@ -253,7 +259,7 @@ func RelayGeminiInteraction(c *gin.Context) {
 	task.SetData(taskgemini.OmniTaskSummary{
 		Status:        "in_progress",
 		Resolution:    req.Resolution,
-		Seconds:       taskgemini.OmniPreChargeSeconds,
+		Seconds:       preSeconds,
 		SecondsSource: "estimate",
 		Model:         info.OriginModelName,
 	})
@@ -570,8 +576,10 @@ func omniFindFileTask(c *gin.Context, fileID string) *model.Task {
 // omniSettleFromFileDuration: tác vụ mới tính tạm 10 s → khi biết thời lượng
 // thật của tệp thì trả lại phần thừa (đúng một lần nhờ CAS trên progress).
 func omniSettleFromFileDuration(ctx context.Context, task *model.Task, seconds float64, source string) {
-	seconds = taskgemini.OmniFileSeconds(seconds)
 	bc := task.PrivateData.BillingContext
+	if bc != nil {
+		seconds = taskgemini.OmniFileSeconds(seconds, bc.OtherRatios["seconds"])
+	}
 	if seconds <= 0 || bc == nil || task.Status != model.TaskStatusSuccess || task.Progress != taskgemini.OmniProgressAwaitingDuration {
 		return
 	}

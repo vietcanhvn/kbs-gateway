@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -172,7 +173,7 @@ func TestOmniBillingMath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ratio, ok := OmniResolutionRatio(tt.resolution)
 			require.True(t, ok)
-			seconds := OmniSecondsFromTokens(tt.videoTokens, ratio)
+			seconds := OmniSecondsFromTokens(float64(tt.videoTokens), ratio)
 			assert.InDelta(t, tt.wantSeconds, seconds, 1e-9)
 			quota, clamp := OmniQuota(price, tt.groupRatio, seconds, ratio)
 			assert.Nil(t, clamp)
@@ -185,7 +186,9 @@ func TestOmniBillingMath(t *testing.T) {
 	quota, _ = OmniQuota(price, 0, 8, 1)
 	assert.Equal(t, 0, quota, "free group never charges")
 	assert.Equal(t, float64(relaycommon.MaxTaskDurationSeconds), OmniSecondsFromTokens(1<<30, 1), "usage seconds are bounded")
-	assert.Equal(t, OmniPreChargeSeconds, OmniFileSeconds(25), "file durations can only lower the pre-charge")
+	assert.Equal(t, OmniPreChargeSeconds, OmniFileSeconds(25, 0), "file durations can only lower the pre-charge")
+	assert.Equal(t, 15.0, OmniFileSeconds(25, 15), "Omni 1.2 pre-charges up to 15 s")
+	assert.Equal(t, 6.0, OmniFileSeconds(6, 15))
 }
 
 func TestOmniBilledSecondsPrefersUsageThenInlineMP4(t *testing.T) {
@@ -217,7 +220,7 @@ func TestOmniBilledSecondsPrefersUsageThenInlineMP4(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var interaction OmniInteraction
 			require.NoError(t, common.UnmarshalJsonStr(tt.body, &interaction))
-			got, source, ok := OmniBilledSeconds([]byte(tt.body), &interaction, 1)
+			got, source, ok := OmniBilledSeconds([]byte(tt.body), &interaction, 1, OmniSpecFor("gemini-omni-1.1-flash"), OmniPreChargeSeconds)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantSource, source)
 			assert.InDelta(t, tt.want, got, 1e-9)
@@ -358,4 +361,51 @@ func TestOmniTaskAdaptorNeverFetchesUpstream(t *testing.T) {
 	resp, err := (&OmniTaskAdaptor{}).FetchTask("https://generativelanguage.googleapis.com", "k", map[string]any{"task_id": "v1"}, "")
 	assert.Nil(t, resp)
 	assert.ErrorIs(t, err, ErrOmniNotPollable)
+}
+
+// 10/11/2026: Omni 1.2 Flash - video ra $12 / 1M token (1.1: $17,50), 3-15 s, nhận response_format.duration; Google tính
+// cả token vào và chữ ra, cổng quy chúng ra token video theo tỉ lệ giá.
+func TestOmni12SpecDurationAndFullTokenBilling(t *testing.T) {
+	spec := OmniSpecFor("gemini-omni-1.2-flash")
+	assert.Equal(t, 15.0, spec.MaxSeconds)
+	assert.True(t, spec.AcceptsDuration)
+	assert.False(t, OmniSpecFor("gemini-omni-1.1-flash").AcceptsDuration)
+	assert.Equal(t, 10.0, OmniPreChargeSecondsFor(OmniSpecFor("gemini-omni-1.1-flash"), 15), "1.1 ignores the requested duration")
+	assert.Equal(t, 15.0, OmniPreChargeSecondsFor(spec, 0), "no duration: the longest turn")
+	assert.Equal(t, 8.0, OmniPreChargeSecondsFor(spec, 8))
+	assert.Equal(t, 15.0, OmniPreChargeSecondsFor(spec, 40))
+
+	for raw, want := range map[string]float64{`"15s"`: 15, `"8S"`: 8, `6`: 6, `"x"`: 0, `null`: 0} {
+		assert.Equal(t, want, ParseOmniDuration(json.RawMessage(raw)), raw)
+	}
+
+	in := []byte(`{"model":"gemini-omni-1.2-flash","input":"x","response_format":{"type":"video","resolution":"720p","duration":20}}`)
+	req, err := ParseOmniRequest(in)
+	require.NoError(t, err)
+	assert.Equal(t, 20.0, req.Duration)
+	out, err := BuildOmniUpstreamBody(in, "gemini-omni-1.2-flash", "")
+	require.NoError(t, err)
+	var parsed struct {
+		ResponseFormat map[string]any `json:"response_format"`
+	}
+	require.NoError(t, common.Unmarshal(out, &parsed))
+	assert.Equal(t, "15s", parsed.ResponseFormat["duration"], "kept for 1.2, clamped to 15 s, sent as \"Ns\"")
+	out, err = BuildOmniUpstreamBody(in, "gemini-omni-1.2-flash", "", "duration")
+	require.NoError(t, err)
+	parsed.ResponseFormat = nil
+	require.NoError(t, common.Unmarshal(out, &parsed))
+	assert.NotContains(t, parsed.ResponseFormat, "duration", "retry without duration when Google rejects it")
+
+	// Một lượt thật (10/11): 7.724 token video ra, 6.832 token vào (video tham chiếu), 8.341 token ra tổng.
+	var interaction OmniInteraction
+	require.NoError(t, common.Unmarshal([]byte(`{"status":"completed","usage":{"total_input_tokens":6832,"total_output_tokens":8341,"output_tokens_by_modality":[{"modality":"video","tokens":7724}]}}`), &interaction))
+	legacy := interaction.BilledVideoTokens(OmniSpecFor("gemini-omni-1.1-flash"))
+	assert.InDelta(t, 7724+6832*1.5/17.5+617*9/17.5, legacy, 1e-6)
+	billed := interaction.BilledVideoTokens(spec)
+	assert.InDelta(t, 7724+6832*1.5/12+617*9/12.0, billed, 1e-6)
+	assert.Greater(t, billed/7724, 1.16, "inputs and text add ~17% on top of the video tokens")
+	var noVideo OmniInteraction
+	require.NoError(t, common.Unmarshal([]byte(`{"status":"completed","usage":{"total_input_tokens":500}}`), &noVideo))
+	assert.Equal(t, 0.0, noVideo.BilledVideoTokens(spec), "no video yet: wait for the file duration")
+	assert.Contains(t, (&OmniTaskAdaptor{}).GetModelList(), "gemini-omni-1.2-flash")
 }

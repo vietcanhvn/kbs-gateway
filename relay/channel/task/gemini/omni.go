@@ -17,7 +17,11 @@ package gemini
 //     tiền vì thế đúng bằng tiền Google thu × lãi, ở mọi độ phân giải.
 //  2. Thời lượng thật đọc từ tệp MP4 (base64 trả kèm, metadata tệp, hoặc lúc
 //     tải về qua cổng) — chỉ dùng để TRẢ LẠI phần trừ trước thừa.
-//  3. Không biết: giữ mức trừ trước OmniPreChargeSeconds (10 s, tối đa một lượt).
+//  3. Không biết: giữ mức trừ trước (số giây yêu cầu, hoặc lượt dài nhất của mô hình).
+//
+// Google còn tính token VÀO (chữ, ảnh, video tham chiếu: 1.120 token / ảnh, tới 5.792 token / giây video) và
+// chữ RA (kể cả suy luận). Cổng quy chúng ra "token video" theo tỉ lệ giá của từng bản (OmniSpec) nên mọi phần đều
+// mang cùng mức lãi của ModelPrice (10/11/2026: một lượt có video tham chiếu tốn thêm ~17% ngoài phần video ra).
 //
 // Cổng KHÔNG dùng interaction nền (background) của Google: GET
 // /v1beta/interactions/{id} của interaction nền luôn bị Google từ chối khi xác
@@ -44,6 +48,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -55,7 +60,7 @@ import (
 const (
 	// OmniTokensPerSecond720p: Google tính 5.792 token đầu ra cho mỗi giây video 720p.
 	OmniTokensPerSecond720p = 5792.0
-	// OmniPreChargeSeconds: một lượt Omni ra 3–10 s; trừ trước mức tối đa rồi trả lại phần thừa.
+	// OmniPreChargeSeconds: lượt dài nhất của Omni Flash / 1.1 Flash (3–10 s); bản mới xem OmniSpec.MaxSeconds.
 	OmniPreChargeSeconds = 10.0
 	// OmniDefaultResolution: độ phân giải mặc định của Google khi không gửi.
 	OmniDefaultResolution = "720p"
@@ -74,6 +79,58 @@ var omniResolutionRatios = map[string]float64{
 	"4k":    3,
 }
 
+// OmniSpec: giá Google (USD / 1 triệu token) và giới hạn của một bản Omni.
+type OmniSpec struct {
+	VideoOutputPrice float64 // video ra (5.792 token / giây 720p)
+	InputPrice       float64 // chữ, ảnh, video vào
+	TextOutputPrice  float64 // chữ ra, kể cả suy luận
+	MaxSeconds       float64 // một lượt dài nhất
+	AcceptsDuration  bool    // nhận response_format.duration ("15s")
+}
+
+var (
+	// Omni 1.2 Flash (bảng giá Google 10/11/2026): video ra $12, vào $1,50, chữ ra $9; 3–15 s, đặt được số giây.
+	omniSpec12 = OmniSpec{VideoOutputPrice: 12, InputPrice: 1.5, TextOutputPrice: 9, MaxSeconds: 15, AcceptsDuration: true}
+	// Omni Flash / 1.1 Flash: video ra $17,50; 3–10 s; Google không nhận duration. Từ 03/12/2026 Google chuyển 1.1 sang 1.2.
+	omniSpecLegacy = OmniSpec{VideoOutputPrice: 17.5, InputPrice: 1.5, TextOutputPrice: 9, MaxSeconds: OmniPreChargeSeconds}
+)
+
+// OmniSpecFor: giá và giới hạn theo tên mô hình Google.
+func OmniSpecFor(model string) OmniSpec {
+	if strings.Contains(strings.ToLower(model), "omni-1.2") {
+		return omniSpec12
+	}
+	return omniSpecLegacy
+}
+
+// OmniPreChargeSecondsFor: số giây trừ trước - số giây yêu cầu khi mô hình nhận duration, không thì lượt dài nhất.
+func OmniPreChargeSecondsFor(spec OmniSpec, requested float64) float64 {
+	if spec.AcceptsDuration && requested >= 1 {
+		return math.Min(requested, spec.MaxSeconds)
+	}
+	return spec.MaxSeconds
+}
+
+// ParseOmniDuration đọc response_format.duration ("15s" hoặc 15); 0 khi không có / sai.
+func ParseOmniDuration(raw json.RawMessage) float64 {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0
+	}
+	var number float64
+	if err := common.Unmarshal(raw, &number); err == nil && number > 0 {
+		return math.Round(number)
+	}
+	var text string
+	if err := common.Unmarshal(raw, &text); err != nil {
+		return 0
+	}
+	value, err := strconv.ParseFloat(strings.TrimSuffix(strings.ToLower(strings.TrimSpace(text)), "s"), 64)
+	if err != nil || value <= 0 {
+		return 0
+	}
+	return math.Round(value)
+}
+
 // OmniResolutionRatio trả hệ số giá của độ phân giải (đã chuẩn hoá chữ thường).
 func OmniResolutionRatio(resolution string) (float64, bool) {
 	ratio, ok := omniResolutionRatios[resolution]
@@ -85,15 +142,17 @@ type OmniRequest struct {
 	Model                 string
 	PreviousInteractionID string
 	Resolution            string
-	Task                  string // generation_config.video_config.task
+	Task                  string  // generation_config.video_config.task
+	Duration              float64 // response_format.duration (giây), 0 = để mô hình tự chọn
 }
 
 type omniRequestFields struct {
 	Model                 string `json:"model"`
 	PreviousInteractionID string `json:"previous_interaction_id"`
 	ResponseFormat        *struct {
-		Type       string `json:"type"`
-		Resolution string `json:"resolution"`
+		Type       string          `json:"type"`
+		Resolution string          `json:"resolution"`
+		Duration   json.RawMessage `json:"duration"`
 	} `json:"response_format"`
 	GenerationConfig *struct {
 		VideoConfig *struct {
@@ -124,6 +183,7 @@ func ParseOmniRequest(body []byte) (*OmniRequest, error) {
 		if rf.Resolution != "" {
 			req.Resolution = strings.ToLower(strings.TrimSpace(rf.Resolution))
 		}
+		req.Duration = ParseOmniDuration(rf.Duration)
 	}
 	if _, ok := OmniResolutionRatio(req.Resolution); !ok {
 		return nil, fmt.Errorf("unsupported response_format.resolution %q (360p, 720p, 1080p, 4k)", req.Resolution)
@@ -141,8 +201,8 @@ func ParseOmniRequest(body []byte) (*OmniRequest, error) {
 //   - store: bỏ false — interaction phải được lưu thì lượt sau mới sửa/nối tiếp được;
 //   - response_format.type mặc định "video", delivery luôn "uri" (video tải sau
 //     qua cổng; phản hồi hỏi trạng thái được lưu vào CSDL nên không chứa base64).
-//   - response_format.duration bị bỏ: Google không nhận ("Invalid input at
-//     'response_format'"), độ dài do mô hình tự chọn (3-10 s).
+//   - response_format.duration: bản nhận (Omni 1.2: "3s".."15s") thì gửi dạng "Ns"; bản cũ
+//     không nhận ("Invalid input at 'response_format'") nên bỏ, độ dài do mô hình tự chọn.
 //
 // drop: các khoá tuỳ chọn của response_format phải bỏ (gửi lại khi Google từ chối).
 func BuildOmniUpstreamBody(body []byte, upstreamModel, previousInteractionID string, drop ...string) ([]byte, error) {
@@ -177,7 +237,13 @@ func BuildOmniUpstreamBody(body []byte, upstreamModel, previousInteractionID str
 		responseFormat["type"] = json.RawMessage(`"video"`)
 	}
 	responseFormat["delivery"] = json.RawMessage(`"uri"`)
-	delete(responseFormat, "duration")
+	spec := OmniSpecFor(upstreamModel)
+	if seconds := ParseOmniDuration(responseFormat["duration"]); spec.AcceptsDuration && seconds > 0 {
+		seconds = math.Max(3, math.Min(seconds, spec.MaxSeconds))
+		responseFormat["duration"] = json.RawMessage(fmt.Sprintf(`"%ds"`, int(seconds)))
+	} else {
+		delete(responseFormat, "duration")
+	}
 	for _, key := range drop {
 		delete(responseFormat, key)
 	}
@@ -194,6 +260,8 @@ type OmniInteraction struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 	Usage  *struct {
+		TotalInputTokens       int `json:"total_input_tokens"`
+		TotalOutputTokens      int `json:"total_output_tokens"`
 		OutputTokensByModality []struct {
 			Modality string `json:"modality"`
 			Tokens   int    `json:"tokens"`
@@ -216,6 +284,17 @@ func (i *OmniInteraction) VideoOutputTokens() int {
 		}
 	}
 	return total
+}
+
+// BilledVideoTokens: token video ra cộng token vào và chữ ra quy đổi theo giá (Google tính cả ba). 0 khi chưa có video.
+func (i *OmniInteraction) BilledVideoTokens(spec OmniSpec) float64 {
+	video := float64(i.VideoOutputTokens())
+	if video <= 0 || spec.VideoOutputPrice <= 0 {
+		return 0
+	}
+	input := float64(i.Usage.TotalInputTokens)
+	text := math.Max(0, float64(i.Usage.TotalOutputTokens)-video)
+	return video + input*spec.InputPrice/spec.VideoOutputPrice + text*spec.TextOutputPrice/spec.VideoOutputPrice
 }
 
 // OmniTaskStatus đổi trạng thái interaction của Google sang trạng thái task.
@@ -241,32 +320,35 @@ func OmniQuota(modelPrice, groupRatio, seconds, resolutionRatio float64) (int, *
 	return common.QuotaFromFloatChecked(modelPrice * common.QuotaPerUnit * groupRatio * seconds * resolutionRatio)
 }
 
-// OmniSecondsFromTokens đổi token video đầu ra sang giây (đã chặn trên).
-func OmniSecondsFromTokens(videoTokens int, resolutionRatio float64) float64 {
+// OmniSecondsFromTokens đổi token (video, hoặc quy đổi - BilledVideoTokens) sang giây tính tiền (đã chặn trên).
+func OmniSecondsFromTokens(videoTokens float64, resolutionRatio float64) float64 {
 	if videoTokens <= 0 || resolutionRatio <= 0 {
 		return 0
 	}
-	return math.Min(float64(videoTokens)/(OmniTokensPerSecond720p*resolutionRatio), relaycommon.MaxTaskDurationSeconds)
+	return math.Min(videoTokens/(OmniTokensPerSecond720p*resolutionRatio), relaycommon.MaxTaskDurationSeconds)
 }
 
-// OmniFileSeconds chặn thời lượng đo từ tệp: chỉ được làm GIẢM so với mức trừ trước,
+// OmniFileSeconds chặn thời lượng đo từ tệp: chỉ được làm GIẢM so với mức trừ trước (preCharged),
 // vì video ghép (extend) có thể dài hơn phần Google thực tính.
-func OmniFileSeconds(seconds float64) float64 {
+func OmniFileSeconds(seconds, preCharged float64) float64 {
 	if seconds <= 0 || math.IsNaN(seconds) {
 		return 0
 	}
-	return math.Min(seconds, OmniPreChargeSeconds)
+	if preCharged <= 0 {
+		preCharged = OmniPreChargeSeconds
+	}
+	return math.Min(seconds, preCharged)
 }
 
 // OmniBilledSeconds tìm số giây tính tiền trong phản hồi đã hoàn tất.
 // source là "usage" hoặc "mp4"; ok=false khi chưa biết (tính tạm 10 s).
-func OmniBilledSeconds(respBody []byte, interaction *OmniInteraction, resolutionRatio float64) (seconds float64, source string, ok bool) {
-	if s := OmniSecondsFromTokens(interaction.VideoOutputTokens(), resolutionRatio); s > 0 {
+func OmniBilledSeconds(respBody []byte, interaction *OmniInteraction, resolutionRatio float64, spec OmniSpec, preCharged float64) (seconds float64, source string, ok bool) {
+	if s := OmniSecondsFromTokens(interaction.BilledVideoTokens(spec), resolutionRatio); s > 0 {
 		return s, "usage", true
 	}
 	for _, data := range omniInlineVideos(respBody) {
 		if d, found := MP4DurationSeconds(data); found {
-			if s := OmniFileSeconds(d); s > 0 {
+			if s := OmniFileSeconds(d, preCharged); s > 0 {
 				return s, "mp4", true
 			}
 		}
@@ -495,7 +577,7 @@ type OmniTaskAdaptor struct {
 }
 
 func (a *OmniTaskAdaptor) GetModelList() []string {
-	return []string{"gemini-omni-1.1-flash", "gemini-omni-flash-preview"}
+	return []string{"gemini-omni-1.2-flash", "gemini-omni-1.1-flash", "gemini-omni-flash-preview"}
 }
 
 func (a *OmniTaskAdaptor) GetChannelName() string {
@@ -561,7 +643,7 @@ func (a *OmniTaskAdaptor) AdjustBillingOnComplete(task *model.Task, _ *relaycomm
 		return 0
 	}
 	resolutionRatio := bc.OtherRatios["resolution"]
-	seconds := OmniSecondsFromTokens(interaction.VideoOutputTokens(), resolutionRatio)
+	seconds := OmniSecondsFromTokens(interaction.BilledVideoTokens(OmniSpecFor(bc.OriginModelName)), resolutionRatio)
 	if seconds <= 0 {
 		return 0
 	}

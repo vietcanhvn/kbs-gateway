@@ -122,6 +122,22 @@ export function useUsersColumns(): ColumnDef<User>[] {
       meta: { mobileTitle: true },
     },
     {
+      // KBS (11/11): email đăng nhập của thành viên (Google) - quản trị xem danh sách email ngay ở bảng.
+      accessorKey: 'email',
+      header: t('Email'),
+      cell: ({ row }) => {
+        const email = row.original.email
+        if (!email) return <span className='text-muted-foreground'>-</span>
+        return (
+          <a href={`mailto:${email}`} className='hover:underline'>
+            <LongText className='max-w-[220px]'>{email}</LongText>
+          </a>
+        )
+      },
+      size: 220,
+      meta: { mobileOrder: 15 },
+    },
+    {
       accessorKey: 'status',
       header: t('Status'),
       cell: ({ row }) => {

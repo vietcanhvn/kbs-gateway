@@ -17,7 +17,7 @@ import (
 
 const emailWrapperStyle = "font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f2937;font-size:15px;line-height:1.6;max-width:520px;margin:0 auto;padding:24px"
 
-// emailSubject thêm tên hệ thống vào đầu tiêu đề: "[KBS API] ...".
+// emailSubject thêm tên hệ thống vào đầu tiêu đề: "[KBS's API] ...".
 func emailSubject(subject string) string {
 	prefix := "[" + common.SystemName + "] "
 	if strings.HasPrefix(subject, prefix) {
@@ -32,12 +32,22 @@ func emailWebsiteLabel(website string) string {
 	return strings.TrimRight(label, "/")
 }
 
+// Các sản phẩm của nền tảng ở chân thư (11/11 anh Tiếp): tên gọi rồi địa chỉ web tương ứng. Dòng đầu là trang chính
+// (EmailBrandWebsite).
+var emailProductLinks = []struct{ Label, URL string }{
+	{"KBS App", "https://app.kimbox.studio"},
+	{"KBS's API", "https://api.kimbox.studio"},
+}
+
+func emailBrandLinks() []struct{ Label, URL string } {
+	return append([]struct{ Label, URL string }{{"KBS - KimBox Studio", common.EmailBrandWebsite}}, emailProductLinks...)
+}
+
 // renderEmailLayout bọc phần thân (HTML) vào khung chung: tên hệ thống ở đầu,
-// chân thư có đơn vị vận hành, trang web và email hỗ trợ.
+// chân thư có tên nền tảng, các sản phẩm kèm địa chỉ web và email hỗ trợ.
 func renderEmailLayout(bodyHTML string) string {
 	name := html.EscapeString(common.SystemName)
 	company := html.EscapeString(common.EmailBrandCompany)
-	website := html.EscapeString(common.EmailBrandWebsite)
 	contact := html.EscapeString(common.SMTPFrom)
 	var b strings.Builder
 	b.WriteString("<div style=\"" + emailWrapperStyle + "\">\n")
@@ -45,10 +55,13 @@ func renderEmailLayout(bodyHTML string) string {
 	b.WriteString(bodyHTML)
 	b.WriteString("\n<hr style=\"border:none;border-top:1px solid #e5e7eb;margin:24px 0 12px\">\n")
 	b.WriteString("<p style=\"font-size:12px;color:#6b7280;margin:0\">")
-	b.WriteString("Thư tự động từ " + name + ", dịch vụ của " + company + ". / Automated message from " + name + ", a service of " + company + ".<br>\n")
-	b.WriteString("Website: <a href=\"" + website + "\">" + html.EscapeString(emailWebsiteLabel(common.EmailBrandWebsite)) + "</a>")
+	b.WriteString("Thư tự động từ " + name + ", sản phẩm của " + company + ". / Automated message from " + name + ", a product of " + company + ".<br>\n")
+	for _, link := range emailBrandLinks() {
+		url := html.EscapeString(link.URL)
+		b.WriteString(html.EscapeString(link.Label) + ": <a href=\"" + url + "\">" + html.EscapeString(emailWebsiteLabel(link.URL)) + "</a><br>\n")
+	}
 	if contact != "" {
-		b.WriteString(" &middot; Hỗ trợ / Support: <a href=\"mailto:" + contact + "\">" + contact + "</a>")
+		b.WriteString("Hỗ trợ / Support: <a href=\"mailto:" + contact + "\">" + contact + "</a>")
 	}
 	b.WriteString("</p>\n</div>")
 	return b.String()
@@ -56,8 +69,11 @@ func renderEmailLayout(bodyHTML string) string {
 
 // emailTextFooter là chân thư của bản chữ thuần.
 func emailTextFooter() string {
-	footer := fmt.Sprintf("--\nThư tự động từ %s, dịch vụ của %s. / Automated message from %s, a service of %s.\nWebsite: %s",
-		common.SystemName, common.EmailBrandCompany, common.SystemName, common.EmailBrandCompany, common.EmailBrandWebsite)
+	footer := fmt.Sprintf("--\nThư tự động từ %s, sản phẩm của %s. / Automated message from %s, a product of %s.",
+		common.SystemName, common.EmailBrandCompany, common.SystemName, common.EmailBrandCompany)
+	for _, link := range emailBrandLinks() {
+		footer += "\n" + link.Label + ": " + link.URL
+	}
 	if common.SMTPFrom != "" {
 		footer += "\nHỗ trợ / Support: " + common.SMTPFrom
 	}

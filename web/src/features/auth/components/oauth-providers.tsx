@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import {
   IconDiscord,
   IconGithub,
+  IconGoogle,
   IconLinuxDo,
   IconTelegram,
   IconWeChat,
@@ -48,7 +49,12 @@ type OAuthProvidersProps = {
    */
   blocked?: boolean
   onBlockedClick?: () => void
+  /** Dòng kẻ "Hoặc tiếp tục với" phía trên các nút (trang đăng nhập KBS's API đặt nút đăng nhập lên đầu nên ẩn đi). */
+  showDivider?: boolean
 }
+
+/** Đăng nhập Google (OIDC hay OAuth riêng mang tên Google): biểu tượng G và đứng đầu danh sách cho dễ thấy (11/11). */
+const isGoogleName = (name: string | undefined) => /google/i.test(name ?? '')
 
 type ProviderButton = {
   key: string
@@ -67,6 +73,7 @@ export function OAuthProviders({
   redirectTo,
   blocked = false,
   onBlockedClick,
+  showDivider = true,
 }: OAuthProvidersProps) {
   const { t } = useTranslation()
   const {
@@ -124,6 +131,7 @@ export function OAuthProviders({
         name: oidcDisplayName,
       }),
       onClick: handleOIDCLogin,
+      ...(isGoogleName(oidcDisplayName) ? { icon: <IconGoogle className='h-5 w-5' /> } : {}),
     })
   }
 
@@ -153,25 +161,30 @@ export function OAuthProviders({
         key: `custom-${provider.slug}`,
         label: t('Continue with {{name}}', { name: provider.name }),
         onClick: () => handleCustomOAuthLogin(provider),
+        ...(isGoogleName(provider.name) ? { icon: <IconGoogle className='h-5 w-5' /> } : {}),
       })
     }
   }
 
   if (providerButtons.length === 0) return null
+  // Google lên đầu: người dùng tìm nút này trước tiên.
+  providerButtons.sort((a, b) => Number(isGoogleName(b.label)) - Number(isGoogleName(a.label)))
 
   return (
     <>
       <div className={cn('space-y-3', className)}>
-        <div className='relative'>
-          <div className='absolute inset-0 flex items-center'>
-            <span className='w-full border-t' />
+        {showDivider && (
+          <div className='relative'>
+            <div className='absolute inset-0 flex items-center'>
+              <span className='w-full border-t' />
+            </div>
+            <div className='relative flex justify-center text-xs uppercase'>
+              <span className='bg-background text-muted-foreground px-2'>
+                {t('Or continue with')}
+              </span>
+            </div>
           </div>
-          <div className='relative flex justify-center text-xs uppercase'>
-            <span className='bg-background text-muted-foreground px-2'>
-              {t('Or continue with')}
-            </span>
-          </div>
-        </div>
+        )}
 
         <div className='flex flex-col gap-2'>
           {providerButtons.map(

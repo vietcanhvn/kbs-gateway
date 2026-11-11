@@ -2,6 +2,7 @@ package service
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -15,8 +16,8 @@ func useKBSBrandForEmailTest(t *testing.T) {
 	t.Helper()
 	oldName, oldFrom := common.SystemName, common.SMTPFrom
 	oldCompany, oldWebsite := common.EmailBrandCompany, common.EmailBrandWebsite
-	common.SystemName, common.SMTPFrom = "KBS API", "contact@kimbox.studio"
-	common.EmailBrandCompany, common.EmailBrandWebsite = "Kim Box Studio (KMG)", "https://kimbox.studio"
+	common.SystemName, common.SMTPFrom = "KBS's API", "contact@kimbox.studio"
+	common.EmailBrandCompany, common.EmailBrandWebsite = "KBS (KimBox Studio)", "https://kimbox.studio"
 	t.Cleanup(func() {
 		common.SystemName, common.SMTPFrom = oldName, oldFrom
 		common.EmailBrandCompany, common.EmailBrandWebsite = oldCompany, oldWebsite
@@ -40,15 +41,19 @@ func writeEmailPreview(t *testing.T, name string, message common.EmailMessage) {
 
 func assertBrandedEmail(t *testing.T, message common.EmailMessage) {
 	t.Helper()
-	assert.True(t, strings.HasPrefix(message.Subject, "[KBS API] "), message.Subject)
+	assert.True(t, strings.HasPrefix(message.Subject, "[KBS's API] "), message.Subject)
 	for _, body := range []string{message.HTML, message.Text} {
 		if body == "" {
 			continue
 		}
-		assert.Contains(t, body, "KBS API")
-		assert.Contains(t, body, "Kim Box Studio (KMG)")
-		assert.Contains(t, body, "kimbox.studio")
+		// 11/11: một cách gọi - KBS (KimBox Studio), KBS App, KBS's API - kèm địa chỉ web ở chân thư.
+		assert.Contains(t, body, "KBS (KimBox Studio)")
+		assert.Contains(t, body, "KBS - KimBox Studio")
+		assert.Contains(t, body, "KBS App")
+		assert.Contains(t, body, "app.kimbox.studio")
+		assert.Contains(t, body, "api.kimbox.studio")
 		assert.Contains(t, body, "contact@kimbox.studio")
+		assert.NotContains(t, body, "Kim Box")
 	}
 	// Không ảnh ngoài, không kịch bản, không chữ mẫu gốc tiếng Trung.
 	assert.NotContains(t, message.HTML, "<img")
@@ -62,7 +67,7 @@ func TestVerificationEmailCarriesBrandCodeValidityAndIgnoreNote(t *testing.T) {
 	writeEmailPreview(t, "ma-xac-minh", message)
 
 	assertBrandedEmail(t, message)
-	assert.Equal(t, "[KBS API] Mã xác minh email của bạn: 483920", message.Subject)
+	assert.Equal(t, "[KBS's API] Mã xác minh email của bạn: 483920", message.Subject)
 	for _, body := range []string{message.HTML, message.Text} {
 		assert.Contains(t, body, "483920")
 		assert.Contains(t, body, "10 phút")
@@ -78,16 +83,15 @@ func TestPasswordResetEmailLinksOnlyToTheSystemItself(t *testing.T) {
 	writeEmailPreview(t, "dat-lai-mat-khau", message)
 
 	assertBrandedEmail(t, message)
-	assert.Equal(t, "[KBS API] Đặt lại mật khẩu tài khoản của bạn", message.Subject)
+	assert.Equal(t, "[KBS's API] Đặt lại mật khẩu tài khoản của bạn", message.Subject)
 	assert.Contains(t, message.Text, link)
 	assert.Contains(t, message.HTML, `href="https://api.kimbox.studio/user/reset?email=a%40b.c&amp;token=tok123"`)
 	assert.Contains(t, message.HTML, "mật khẩu của bạn vẫn giữ nguyên")
-	// Mọi liên kết http(s) trỏ về hệ thống hoặc trang web của đơn vị vận hành.
+	// Mọi liên kết http(s) trỏ về các trang của nền tảng (kimbox.studio, KBS App, KBS's API) hoặc email hỗ trợ.
+	own := regexp.MustCompile(`^https://((app|api)\.)?kimbox\.studio(/|$)`)
 	for _, piece := range strings.Split(message.HTML, `href="`)[1:] {
 		target := piece[:strings.Index(piece, `"`)]
-		assert.True(t,
-			strings.HasPrefix(target, "https://api.kimbox.studio/") || target == "https://kimbox.studio" || strings.HasPrefix(target, "mailto:contact@kimbox.studio"),
-			target)
+		assert.True(t, own.MatchString(target) || strings.HasPrefix(target, "mailto:contact@kimbox.studio"), target)
 	}
 }
 
@@ -98,7 +102,7 @@ func TestQuotaWarningEmailNamesTheBalanceAndTheWalletLink(t *testing.T) {
 	writeEmailPreview(t, "so-du-sap-het", message)
 
 	assertBrandedEmail(t, message)
-	assert.Equal(t, "[KBS API] Số dư tài khoản sắp hết: còn $0.12", message.Subject)
+	assert.Equal(t, "[KBS's API] Số dư tài khoản sắp hết: còn $0.12", message.Subject)
 	assert.Contains(t, message.HTML, "<strong>$0.12</strong>")
 	assert.Contains(t, message.HTML, `href="https://api.kimbox.studio/wallet"`)
 

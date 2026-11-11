@@ -104,9 +104,10 @@ var SMTPForceAuthLogin = false
 var SMTPAccount = ""
 var SMTPFrom = ""
 
-// Chân thư của email hệ thống: tên đơn vị vận hành và trang web chính. Email hỗ
-// trợ lấy theo SMTPFrom. Đổi được qua bảng cài đặt (EmailBrandCompany / EmailBrandWebsite).
-var EmailBrandCompany = "Kim Box Studio (KMG)"
+// Chân thư của email hệ thống: tên nền tảng và trang web chính. Email hỗ trợ lấy theo SMTPFrom. Đổi được qua bảng cài
+// đặt (EmailBrandCompany / EmailBrandWebsite). 11/11 anh Tiếp: KBS là tên chung của nền tảng, viết tắt của KimBox Studio
+// (KimBox viết liền); hai sản phẩm là KBS App và KBS's API.
+var EmailBrandCompany = "KBS (KimBox Studio)"
 var EmailBrandWebsite = "https://kimbox.studio"
 var SMTPToken = ""
 

@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link } from '@tanstack/react-router'
 import axios from 'axios'
-import { Loader2, LogIn, KeyRound } from 'lucide-react'
+import { Loader2, LogIn, KeyRound, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -74,6 +74,9 @@ export function UserAuthForm({
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
   const [legalConsentHighlight, setLegalConsentHighlight] = useState(false)
+  // Có nút Google / OAuth thì ô tài khoản - mật khẩu thu vào một nút "Dùng tài khoản mật khẩu" (11/11 anh Tiếp: người dùng
+  // không thấy nút Google, đi tìm cách điền mật khẩu). Bấm nút mới hiện các ô.
+  const [showPasswordLogin, setShowPasswordLogin] = useState(false)
   const loginFailedMessage = t('Login failed')
 
   const { status } = useStatus()
@@ -112,6 +115,7 @@ export function UserAuthForm({
   )
   const hasAlternativeLogin =
     passkeyLoginEnabled || hasWeChatLogin || hasOAuthLogin
+  const passwordCollapsed = passwordLoginEnabled && hasAlternativeLogin && !showPasswordLogin
 
   useEffect(() => {
     if (requiresLegalConsent) {
@@ -359,6 +363,7 @@ export function UserAuthForm({
         onBlockedClick={ensureLegalConsent}
         onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
         isWeChatLoading={isWeChatSubmitting}
+        showDivider={!hasAlternativeLogin}
       />
     </>
   )
@@ -381,7 +386,31 @@ export function UserAuthForm({
       >
         {hasAlternativeLogin && alternativeLoginMethods}
 
-        {passwordLoginEnabled && (
+        {hasAlternativeLogin && passwordLoginEnabled && (
+          <div className='relative'>
+            <div className='absolute inset-0 flex items-center'>
+              <span className='w-full border-t' />
+            </div>
+            <div className='relative flex justify-center text-xs uppercase'>
+              <span className='bg-background text-muted-foreground px-2'>{t('or')}</span>
+            </div>
+          </div>
+        )}
+
+        {passwordCollapsed && (
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() => setShowPasswordLogin(true)}
+            className='h-11 w-full justify-center gap-2 rounded-lg'
+            data-testid='show-password-login'
+          >
+            <UserRound className='h-4 w-4' />
+            {t('Use username and password')}
+          </Button>
+        )}
+
+        {passwordLoginEnabled && !passwordCollapsed && (
           <>
             {/* Username Field */}
             <FormField
@@ -393,6 +422,7 @@ export function UserAuthForm({
                   <FormControl>
                     <Input
                       placeholder={t('Enter your username or email')}
+                      autoFocus={showPasswordLogin}
                       {...field}
                     />
                   </FormControl>

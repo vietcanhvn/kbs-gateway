@@ -427,14 +427,19 @@ func completePayOSOrder(ctx context.Context, orderCode int64, paidVND int64, cal
 // Luôn trả 200 khi chữ ký đúng (kể cả đơn không có hay đã cộng) để payOS không
 // gửi lại mãi; chữ ký sai trả 400.
 func PayOSWebhook(c *gin.Context) {
-	if !isPayOSWebhookEnabled() {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("payOS webhook bị từ chối reason=disabled client_ip=%s", c.ClientIP()))
-		c.AbortWithStatus(http.StatusForbidden)
-		return
-	}
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	// Đơn KimKid (14 số, đầu "77"): chuyển nguyên văn sang kimkid.studio, không đụng đơn KBS.
+	if orderCode := kimkidPayOSOrderCode(body); orderCode != "" {
+		forwardKimKidPayOSWebhook(c, body, orderCode)
+		return
+	}
+	if !isPayOSWebhookEnabled() {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("payOS webhook bị từ chối reason=disabled client_ip=%s", c.ClientIP()))
+		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 	var envelope payOSEnvelope

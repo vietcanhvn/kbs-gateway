@@ -5398,6 +5398,8 @@
     "no prompt text node was found; requests with a prompt will be rejected until a prompt input is mapped": "no prompt text node was found; requests with a prompt will be rejected until a prompt input is mapped",
     "some nodes are packed by RunningHub's comfyui-workflow-encrypt; they run on RunningHub but their source package is not named in the export": "some nodes are packed by RunningHub's comfyui-workflow-encrypt; they run on RunningHub but their source package is not named in the export",
     "Use username and password": "Use username and password",
-    "or": "or"
+    "or": "or",
+    "You get": "You get",
+    "Credit received:": "Credit received:"
   }
 }

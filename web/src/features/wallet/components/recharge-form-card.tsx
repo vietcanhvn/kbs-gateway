@@ -77,6 +77,14 @@ interface RechargeFormCardProps {
   payCurrencySuffix?: string
   /** Ký hiệu số dư trước mức nạp (vd '$') */
   amountPrefix?: string
+  /**
+   * Chỉ có payOS (12/11 anh Tiếp): tỉ giá payOS (số đồng / $1). Có thì các mức nạp ghi số đồng phải trả (50.000 ₫...) và ô
+   * Số tiền tùy chỉnh gõ bằng VNĐ - cổng thu đúng số đó.
+   */
+  vndUnitPrice?: number
+  /** Số đồng đã gõ ở ô Số tiền tùy chỉnh (null = đang dùng mức đặt sẵn). */
+  topupVnd?: number | null
+  onTopupVndChange?: (vnd: number) => void
   onOpenBilling?: () => void
   creemProducts?: CreemProduct[]
   enableCreemTopup?: boolean
@@ -109,6 +117,9 @@ export function RechargeFormCard({
   usdExchangeRate = 1,
   payCurrencySuffix = '',
   amountPrefix = '',
+  vndUnitPrice = 0,
+  topupVnd = null,
+  onTopupVndChange,
   onOpenBilling,
   creemProducts,
   enableCreemTopup,
@@ -135,6 +146,23 @@ export function RechargeFormCard({
     if (numValue >= 0) {
       onTopupAmountChange(numValue)
     }
+  }
+
+  // Nạp bằng VNĐ: ô gõ số đồng (bỏ dấu chấm / phẩy ngăn nghìn), hiện lại có dấu ngăn nghìn.
+  const vndMode = vndUnitPrice > 0 && !!onTopupVndChange
+  const vndOf = (usd: number) => Math.round(usd * vndUnitPrice)
+  const [localVnd, setLocalVnd] = useState('')
+  useEffect(() => {
+    // Đã gõ số đồng thì giữ nguyên chữ đang gõ; chọn mức đặt sẵn thì hiện số đồng của mức đó.
+    if (!vndMode || topupVnd !== null) return
+    setLocalVnd(topupAmount > 0 ? formatNumber(vndOf(topupAmount)) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vndMode, topupAmount, topupVnd, vndUnitPrice])
+  const handleVndChange = (value: string) => {
+    const digits = value.replaceAll(/[^0-9]/g, '')
+    const vnd = digits ? Number.parseInt(digits, 10) : 0
+    setLocalVnd(digits ? formatNumber(vnd) : '')
+    onTopupVndChange?.(vnd)
   }
 
   const hasConfigurableTopup =
@@ -265,8 +293,17 @@ export function RechargeFormCard({
                         >
                           <div className='flex w-full items-center justify-between'>
                             <div className='text-base font-semibold sm:text-lg'>
-                              {amountPrefix}
-                              {formatNumber(displayValue)}
+                              {vndMode ? (
+                                <>
+                                  {formatCurrency(actualPrice)}
+                                  {payCurrencySuffix}
+                                </>
+                              ) : (
+                                <>
+                                  {amountPrefix}
+                                  {formatNumber(displayValue)}
+                                </>
+                              )}
                             </div>
                             {hasDiscount && (
                               <div className='text-xs font-medium text-green-600'>
@@ -275,8 +312,17 @@ export function RechargeFormCard({
                             )}
                           </div>
                           <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
-                            {t('Pay')} {formatCurrency(actualPrice)}
-                            {payCurrencySuffix}
+                            {vndMode ? (
+                              <>
+                                {t('You get')} {amountPrefix}
+                                {formatNumber(displayValue)}
+                              </>
+                            ) : (
+                              <>
+                                {t('Pay')} {formatCurrency(actualPrice)}
+                                {payCurrencySuffix}
+                              </>
+                            )}
                             {hasDiscount && savedAmount > 0 && (
                               <span className='text-green-600'>
                                 {' '}
@@ -298,24 +344,42 @@ export function RechargeFormCard({
                   className='text-muted-foreground text-xs font-medium tracking-wider uppercase'
                 >
                   {t('Custom Amount')}
+                  {vndMode ? ' (₫)' : ''}
                 </Label>
                 <div className='grid grid-cols-[minmax(0,1fr)_minmax(110px,0.55fr)] gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center'>
-                  <Input
-                    id='topup-amount'
-                    type='number'
-                    value={localAmount}
-                    onChange={(e) => handleAmountChange(e.target.value)}
-                    min={minTopup}
-                    placeholder={`${t('Minimum:')} ${minTopup}`}
-                    className='h-9 text-base sm:h-10 sm:text-lg'
-                  />
+                  {vndMode ? (
+                    <Input
+                      id='topup-amount'
+                      type='text'
+                      inputMode='numeric'
+                      value={localVnd}
+                      onChange={(e) => handleVndChange(e.target.value)}
+                      placeholder={`${t('Minimum:')} ${formatCurrency(vndOf(minTopup))}${payCurrencySuffix}`}
+                      className='h-9 text-base sm:h-10 sm:text-lg'
+                    />
+                  ) : (
+                    <Input
+                      id='topup-amount'
+                      type='number'
+                      value={localAmount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      min={minTopup}
+                      placeholder={`${t('Minimum:')} ${minTopup}`}
+                      className='h-9 text-base sm:h-10 sm:text-lg'
+                    />
+                  )}
                   <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
                     <span className='text-muted-foreground truncate text-xs'>
-                      {t('Amount to pay:')}
+                      {vndMode ? t('Credit received:') : t('Amount to pay:')}
                     </span>
-                    {calculating ? (
-                      <Skeleton className='h-5 w-16' />
-                    ) : (
+                    {vndMode && (
+                      <span className='text-sm font-semibold'>
+                        {amountPrefix}
+                        {formatCurrency(topupAmount)}
+                      </span>
+                    )}
+                    {!vndMode && calculating && <Skeleton className='h-5 w-16' />}
+                    {!vndMode && !calculating && (
                       <span className='text-sm font-semibold'>
                         {formatCurrency(paymentAmount)}
                         {payCurrencySuffix}

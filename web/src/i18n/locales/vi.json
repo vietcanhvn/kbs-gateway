@@ -5401,6 +5401,8 @@
     "no prompt text node was found; requests with a prompt will be rejected until a prompt input is mapped": "Không thấy node lời nhắc; yêu cầu có lời nhắc sẽ bị từ chối cho tới khi gán đầu vào lời nhắc",
     "some nodes are packed by RunningHub's comfyui-workflow-encrypt; they run on RunningHub but their source package is not named in the export": "Một số node được RunningHub đóng gói bằng comfyui-workflow-encrypt; chạy được trên RunningHub nhưng bản xuất không ghi gói gốc",
     "Use username and password": "Dùng tài khoản mật khẩu",
-    "or": "hoặc"
+    "or": "hoặc",
+    "You get": "Nhận",
+    "Credit received:": "Tín dụng nhận được:"
   }
 }

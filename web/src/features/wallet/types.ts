@@ -206,6 +206,8 @@ export interface WaffoPaymentRequest {
 /** payOS (chuyển khoản VietQR) - tạo link thanh toán */
 export interface PayOSPaymentRequest {
   amount: number
+  /** Số đồng khách tự gõ: cổng thu đúng số này, cộng hạn mức = số đồng / tỉ giá payOS (bỏ qua amount). */
+  money_vnd?: number
 }
 
 export type PayOSPaymentResponse = ApiResponse<
@@ -276,6 +278,8 @@ export interface TopupRecord {
   user_id: number
   /** Topup amount (quota) */
   amount: number
+  /** Exact quota credited (payOS orders typed in VND, may be a fraction of a dollar); 0 / absent = amount × quota per unit */
+  quota?: number
   /** Payment amount (actual money paid) */
   money: number
   /** Trade/order number */

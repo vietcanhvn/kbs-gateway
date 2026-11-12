@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
-import { formatPaymentCurrencyFromUSD } from '@/lib/currency'
+import { formatPaymentCurrencyFromUSD, getCurrencyDisplay } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 
 import { useBillingHistory } from '../../hooks/use-billing-history'
@@ -242,7 +242,8 @@ export function BillingHistoryDialog({
                           </Label>
                           <div className='text-sm font-semibold'>
                             {/* KBS: credited amount of a payment - keep the configured currency, not the interface language's (12/11). */}
-                            {formatPaymentCurrencyFromUSD(record.amount, {
+                            {/* Nạp payOS theo số VNĐ khách gõ: cột quota là hạn mức thật (có thể lẻ đô), amount chỉ làm tròn. */}
+                            {formatPaymentCurrencyFromUSD(record.quota && record.quota > 0 ? record.quota / getCurrencyDisplay().config.quotaPerUnit : record.amount, {
                               digitsLarge: 2,
                               digitsSmall: 2,
                               abbreviate: false,

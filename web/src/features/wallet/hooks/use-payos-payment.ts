@@ -44,11 +44,13 @@ function getPaymentUrl(data: unknown): string | null {
 export function usePayOSPayment() {
   const [processing, setProcessing] = useState(false)
 
-  const processPayOSPayment = useCallback(async (topupAmount: number) => {
+  /** `moneyVnd`: số đồng khách gõ ở ô Số tiền tùy chỉnh - thu đúng số đó (không quy ra đô chẵn). */
+  const processPayOSPayment = useCallback(async (topupAmount: number, moneyVnd?: number) => {
     setProcessing(true)
     try {
       const response = await requestPayOSPayment({
-        amount: Math.floor(topupAmount),
+        amount: Math.max(1, Math.floor(topupAmount)),
+        ...(moneyVnd && moneyVnd > 0 ? { money_vnd: Math.round(moneyVnd) } : {}),
       })
       if (isApiSuccess(response)) {
         const paymentUrl = getPaymentUrl(response.data)

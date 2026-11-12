@@ -104,14 +104,16 @@ export interface PaymentProcessors {
   regular: (topupAmount: number, paymentType: string) => Promise<boolean>
   waffo: (topupAmount: number, payMethodIndex: number) => Promise<boolean>
   waffoPancake: (topupAmount: number) => Promise<boolean>
-  payos: (topupAmount: number) => Promise<boolean>
+  payos: (topupAmount: number, moneyVnd?: number) => Promise<boolean>
 }
 
 export async function dispatchSelectedPayment(
   paymentMethod: PaymentMethod,
   topupAmount: number,
   waffoMethodIndex: number | null,
-  processors: PaymentProcessors
+  processors: PaymentProcessors,
+  /** payOS: số đồng khách gõ (thu đúng số này); không có = theo mức nạp đô. */
+  moneyVnd?: number | null
 ): Promise<boolean> {
   if (isWaffoPayment(paymentMethod.type)) {
     if (waffoMethodIndex === null) {
@@ -125,7 +127,7 @@ export async function dispatchSelectedPayment(
   }
 
   if (isPayOSPayment(paymentMethod.type)) {
-    return processors.payos(topupAmount)
+    return moneyVnd && moneyVnd > 0 ? processors.payos(topupAmount, moneyVnd) : processors.payos(topupAmount)
   }
 
   return processors.regular(topupAmount, paymentMethod.type)

@@ -114,4 +114,26 @@ describe('payOS dispatch', () => {
     assert.equal(success, true)
     assert.deepEqual(calls, ['payos:10'])
   })
+  // 12/11: khách gõ số tiền VNĐ ở ô Số tiền tùy chỉnh - gửi đúng số đồng đó, cổng thu đúng số đó.
+  test('passes the typed VND amount to payOS', async () => {
+    const calls: string[] = []
+    const success = await dispatchSelectedPayment(
+      { name: 'Chuyển khoản QR (payOS)', type: PAYMENT_TYPES.PAYOS },
+      3.2,
+      null,
+      {
+        regular: async () => false,
+        waffo: async () => false,
+        waffoPancake: async () => false,
+        payos: async (amount, moneyVnd) => {
+          calls.push(`payos:${amount}:${moneyVnd ?? '-'}`)
+          return true
+        },
+      },
+      80000
+    )
+
+    assert.equal(success, true)
+    assert.deepEqual(calls, ['payos:3.2:80000'])
+  })
 })

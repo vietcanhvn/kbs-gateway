@@ -112,12 +112,17 @@ export function Wallet(props: WalletProps) {
     !topupInfo?.enable_stripe_topup &&
     !topupInfo?.enable_waffo_topup &&
     !topupInfo?.enable_waffo_pancake_topup
+  // Chỉ có payOS: ô Số tiền tùy chỉnh gõ bằng VNĐ và cổng thu đúng số đó (12/11 anh Tiếp); các mức đặt sẵn vẫn là đô ×
+  // tỉ giá payOS. topupVnd = số đồng đã gõ (null = đang dùng mức đặt sẵn / số đô).
+  const vndUnitPrice = payosOnly ? Number(topupInfo?.payos_unit_price) || 0 : 0
+  const [topupVnd, setTopupVnd] = useState<number | null>(null)
   const {
     amount: paymentAmount,
     calculating,
     processing,
     calculatePaymentAmount,
     processPayment,
+    setAmount: setPaymentAmount,
   } = usePayment()
   const {
     affiliateLink,
@@ -180,6 +185,7 @@ export function Wallet(props: WalletProps) {
 
   // Handle preset selection
   const handleSelectPreset = (preset: PresetAmount) => {
+    setTopupVnd(null)
     setTopupAmount(preset.value)
     setSelectedPreset(preset.value)
     calculatePaymentAmount(preset.value, getCurrentPaymentType())
@@ -187,9 +193,18 @@ export function Wallet(props: WalletProps) {
 
   // Handle topup amount change
   const handleTopupAmountChange = (amount: number) => {
+    setTopupVnd(null)
     setTopupAmount(amount)
     setSelectedPreset(null)
     calculatePaymentAmount(amount, getCurrentPaymentType())
+  }
+
+  // Ô Số tiền tùy chỉnh bằng VNĐ: số đô nhận được = số đồng / tỉ giá; số phải trả đúng bằng số đồng đã gõ.
+  const handleTopupVndChange = (vnd: number) => {
+    setTopupVnd(vnd)
+    setTopupAmount(vndUnitPrice > 0 ? vnd / vndUnitPrice : 0)
+    setSelectedPreset(null)
+    setPaymentAmount(vnd)
   }
 
   // Handle payment method selection
@@ -206,7 +221,8 @@ export function Wallet(props: WalletProps) {
       }
 
       // Calculate payment amount and show confirmation dialog
-      await calculatePaymentAmount(topupAmount, method.type)
+      if (topupVnd !== null && vndUnitPrice > 0) setPaymentAmount(topupVnd)
+      else await calculatePaymentAmount(topupAmount, method.type)
       setConfirmDialogOpen(true)
     } finally {
       setPaymentLoading(null)
@@ -226,7 +242,8 @@ export function Wallet(props: WalletProps) {
         waffo: processWaffoPayment,
         waffoPancake: processWaffoPancakePayment,
         payos: processPayOSPayment,
-      }
+      },
+      vndUnitPrice > 0 ? topupVnd : null
     )
 
     if (success) {
@@ -356,6 +373,9 @@ export function Wallet(props: WalletProps) {
                   usdExchangeRate={effectiveUsdExchangeRate}
                   payCurrencySuffix={payosOnly ? ' ₫' : ''}
                   amountPrefix={payosOnly ? '$' : ''}
+                  vndUnitPrice={vndUnitPrice}
+                  topupVnd={topupVnd}
+                  onTopupVndChange={handleTopupVndChange}
                   onOpenBilling={() => setBillingDialogOpen(true)}
                   creemProducts={topupInfo?.creem_products}
                   enableCreemTopup={topupInfo?.enable_creem_topup}

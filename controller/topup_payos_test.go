@@ -3,8 +3,10 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -250,4 +252,69 @@ func TestTopUpInfoListsPayOSAndHidesUnconfiguredEpayMethods(t *testing.T) {
 	require.True(t, body.Data.EnablePayOS)
 	require.Len(t, body.Data.PayMethods, 1)
 	require.Equal(t, model.PaymentMethodPayOS, body.Data.PayMethods[0]["type"])
+}
+
+// 12/11 anh Tiếp: khách gõ số tiền VNĐ thì thu đúng số đó, hạn mức = số đồng / tỉ giá (lẻ đô cũng được).
+func TestPayOSPayInVNDChargesExactlyAndCreditsTheFraction(t *testing.T) {
+	db := setupPayOSTest(t)
+	setting.PayOSUnitPrice = 25000
+	require.NoError(t, db.Create(&model.User{Id: 7, Username: "payos_user", Status: common.UserStatusEnabled, Quota: 0}).Error)
+
+	var sentAmount int64
+	payOS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v2/payment-requests", r.URL.Path)
+		var body map[string]any
+		require.NoError(t, decodePayOSJSON(mustReadAll(t, r), &body))
+		sentAmount, _ = payOSNumber(body["amount"])
+		_, _ = w.Write([]byte(`{"code":"00","desc":"success","data":{"checkoutUrl":"https://pay.payos.vn/web/abc"}}`))
+	}))
+	defer payOS.Close()
+	payOSAPIBase = payOS.URL
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Set("id", 7)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/user/payos/pay", strings.NewReader(`{"money_vnd":80000}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	RequestPayOSPay(ctx)
+	require.Contains(t, recorder.Body.String(), `"payment_url":"https://pay.payos.vn/web/abc"`)
+	require.Equal(t, int64(80000), sentAmount)
+
+	var topUp model.TopUp
+	require.NoError(t, db.Where("user_id = ?", 7).First(&topUp).Error)
+	require.Equal(t, float64(80000), topUp.Money)
+	require.Equal(t, int64(3.2*common.QuotaPerUnit), topUp.Quota)
+	require.Equal(t, int64(3), topUp.Amount)
+
+	orderCode, err := strconv.ParseInt(strings.TrimPrefix(topUp.TradeNo, payOSTradePrefix), 10, 64)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, postPayOSWebhook(signedWebhook(t, paidData(orderCode, 80000))).Code)
+	require.Equal(t, int(3.2*common.QuotaPerUnit), userQuota(t, db))
+}
+
+func TestPayOSAmountInVNDEchoesTheSumAndChecksTheMinimum(t *testing.T) {
+	setupPayOSTest(t)
+	setting.PayOSUnitPrice = 25000
+	post := func(body string) string {
+		gin.SetMode(gin.TestMode)
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Set("id", 7)
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/api/user/payos/amount", strings.NewReader(body))
+		ctx.Request.Header.Set("Content-Type", "application/json")
+		RequestPayOSAmount(ctx)
+		return recorder.Body.String()
+	}
+	require.Contains(t, post(`{"money_vnd":123456}`), `"data":"123456"`)
+	require.Contains(t, post(`{"money_vnd":10000}`), "25000")
+	// Mức nạp đặt sẵn vẫn theo đô: $2 × 25.000.
+	require.Equal(t, int64(50000), getPayOSPayMoney(2, "default"))
+}
+
+func mustReadAll(t *testing.T, r *http.Request) []byte {
+	t.Helper()
+	raw, err := io.ReadAll(r.Body)
+	require.NoError(t, err)
+	return raw
 }

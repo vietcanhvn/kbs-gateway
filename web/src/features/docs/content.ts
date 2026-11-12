@@ -65,6 +65,7 @@ Các mục **Ví**, **Khóa API**, **Nhật ký…** nằm ở cột bên trái,
 ## Nạp tiền
 
 - Thanh toán bằng **chuyển khoản ngân hàng qua mã VietQR**. Tỷ giá và mức nạp tối thiểu hiện ngay trên trang **Ví**.
+- Các mức nạp ghi bằng đồng (vd **200.000 ₫**, dòng nhỏ bên dưới ghi số tín dụng nhận được). Muốn số khác thì gõ vào ô **Số tiền tùy chỉnh (₫)**: thu đúng số bạn gõ, tín dụng = số tiền ÷ tỷ giá, có thể lẻ (vd 80.000 ₫ ở tỷ giá 25.000 ₫ → $3,2).
 - Hãy chuyển **đúng số tiền và đúng nội dung** ghi trên mã QR để hệ thống tự nhận.
 - Số dư tính bằng đô la Mỹ ($). Mỗi lần gọi mô hình trừ theo bảng giá ở mục **Mô hình**.
 - Hết số dư thì lệnh gọi bị từ chối cho tới khi bạn nạp thêm; tài khoản và khóa API vẫn giữ nguyên.
@@ -193,6 +194,7 @@ function en({ name, origin }: GuideContext): string {
 ## Topping up
 
 - Payment is a **bank transfer via a VietQR code**. The exchange rate and the minimum amount are shown on the **Wallet** page.
+- Top-up amounts are written in dong (e.g. **200,000 ₫**, with the credit you get on the small line below). For another sum, type it in **Custom Amount (₫)**: you pay exactly what you typed and get that sum ÷ the rate in credit, fractions included (e.g. 80,000 ₫ at 25,000 ₫ per $1 → $3.2).
 - Transfer **the exact amount with the exact note** printed on the QR code so it is matched automatically.
 - The balance is in US dollars ($). Each call is charged at the price listed in **Model Square**.
 - When the balance runs out, calls are refused until you top up; your account and keys are kept.

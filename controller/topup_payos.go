@@ -209,12 +209,55 @@ func payOSRequest(ctx context.Context, method, path string, payload any) (*payOS
 
 type PayOSPayRequest struct {
 	Amount int64 `json:"amount"`
+	// MoneyVND: số đồng khách tự gõ (12/11 anh Tiếp: "khách điền số tiền VNĐ rồi thì thu chính xác nó, không phải chuyển
+	// qua đô"). Có thì bỏ qua Amount: thu đúng số đồng này, cộng hạn mức = số đồng / (tỉ giá payOS × tỉ lệ nhóm nạp) - có
+	// thể lẻ đô (80.000 ₫ = $3,2 ở tỉ giá 25.000).
+	MoneyVND int64 `json:"money_vnd"`
+}
+
+// payOSMaxVND: một đơn nạp theo VNĐ tối đa 1 tỷ đồng (chặn số gõ nhầm; payOS cũng có giới hạn riêng).
+const payOSMaxVND = 1_000_000_000
+
+// payOSMinVND: số đồng tối thiểu của một đơn nạp theo VNĐ = PayOSMinTopUp đơn vị theo tỉ giá payOS.
+func payOSMinVND() int64 {
+	return int64(math.Ceil(float64(setting.PayOSMinTopUp) * setting.PayOSUnitPrice))
+}
+
+// payOSVNDQuota: hạn mức cộng cho đơn nạp `moneyVND` đồng (làm tròn xuống, không cộng dư).
+func payOSVNDQuota(moneyVND int64, group string) int64 {
+	if setting.PayOSUnitPrice <= 0 || moneyVND <= 0 {
+		return 0
+	}
+	topupGroupRatio := common.GetTopupGroupRatio(group)
+	if topupGroupRatio <= 0 {
+		topupGroupRatio = 1
+	}
+	return int64(math.Floor(float64(moneyVND) / (setting.PayOSUnitPrice * topupGroupRatio) * common.QuotaPerUnit))
+}
+
+// payOSVNDError: lời báo khi số đồng gõ vào không hợp lệ, "" nếu hợp lệ.
+func payOSVNDError(moneyVND int64) string {
+	if moneyVND < payOSMinVND() {
+		return fmt.Sprintf("Số tiền nạp tối thiểu là %d ₫", payOSMinVND())
+	}
+	if moneyVND > payOSMaxVND {
+		return fmt.Sprintf("Số tiền nạp tối đa là %d ₫ một lần", int64(payOSMaxVND))
+	}
+	return ""
 }
 
 func RequestPayOSAmount(c *gin.Context) {
 	var req PayOSPayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		return
+	}
+	if req.MoneyVND > 0 {
+		if msg := payOSVNDError(req.MoneyVND); msg != "" {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": msg})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "success", "data": strconv.FormatInt(req.MoneyVND, 10)})
 		return
 	}
 	if req.Amount < int64(setting.PayOSMinTopUp) {
@@ -246,25 +289,40 @@ func RequestPayOSPay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
-	if req.Amount < int64(setting.PayOSMinTopUp) {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", setting.PayOSMinTopUp)})
-		return
-	}
-
 	id := c.GetInt("id")
 	group, _ := model.GetUserGroup(id, true)
-	payMoney := getPayOSPayMoney(float64(req.Amount), group)
-	if payMoney < 1 {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
-		return
-	}
 
-	// Token mode: lưu số đơn vị tương đương (giống Waffo) để lúc cộng không nhân hai lần.
-	amount := req.Amount
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		amount = int64(float64(req.Amount) / common.QuotaPerUnit)
-		if amount < 1 {
-			amount = 1
+	var payMoney, amount, quota int64
+	if req.MoneyVND > 0 {
+		// Nạp theo VNĐ: thu đúng số đồng; Amount chỉ để hiện (đô làm tròn), hạn mức cộng đúng theo Quota.
+		if msg := payOSVNDError(req.MoneyVND); msg != "" {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": msg})
+			return
+		}
+		payMoney = req.MoneyVND
+		quota = payOSVNDQuota(req.MoneyVND, group)
+		if quota <= 0 {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
+			return
+		}
+		amount = int64(math.Max(1, math.Round(float64(quota)/common.QuotaPerUnit)))
+	} else {
+		if req.Amount < int64(setting.PayOSMinTopUp) {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", setting.PayOSMinTopUp)})
+			return
+		}
+		payMoney = getPayOSPayMoney(float64(req.Amount), group)
+		if payMoney < 1 {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
+			return
+		}
+		// Token mode: lưu số đơn vị tương đương (giống Waffo) để lúc cộng không nhân hai lần.
+		amount = req.Amount
+		if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+			amount = int64(float64(req.Amount) / common.QuotaPerUnit)
+			if amount < 1 {
+				amount = 1
+			}
 		}
 	}
 
@@ -273,6 +331,7 @@ func RequestPayOSPay(c *gin.Context) {
 	topUp := &model.TopUp{
 		UserId:          id,
 		Amount:          amount,
+		Quota:           quota,
 		Money:           float64(payMoney),
 		TradeNo:         tradeNo,
 		PaymentMethod:   model.PaymentMethodPayOS,
@@ -315,7 +374,7 @@ func RequestPayOSPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("payOS tạo đơn nạp thành công user_id=%d trade_no=%s amount=%d money_vnd=%d", id, tradeNo, req.Amount, payMoney))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("payOS tạo đơn nạp thành công user_id=%d trade_no=%s amount=%d quota=%d money_vnd=%d", id, tradeNo, amount, quota, payMoney))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data": gin.H{

@@ -12,9 +12,11 @@ import (
 )
 
 type TopUp struct {
-	Id              int     `json:"id"`
-	UserId          int     `json:"user_id" gorm:"index"`
-	Amount          int64   `json:"amount"`
+	Id     int   `json:"id"`
+	UserId int   `json:"user_id" gorm:"index"`
+	Amount int64 `json:"amount"`
+	// Quota: hạn mức cộng đúng khi đơn xong (nạp payOS theo số VNĐ khách gõ, có thể lẻ đô); 0 = tính từ Amount như cũ.
+	Quota           int64   `json:"quota" gorm:"default:0"`
 	Money           float64 `json:"money"`
 	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
@@ -49,6 +51,14 @@ var (
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
 	ErrPaymentAmountMismatch = errors.New("paid amount lower than order amount")
 )
+
+// topUpQuota: hạn mức của một đơn nạp - Quota khi đơn ghi sẵn (payOS theo VNĐ), không thì Amount × QuotaPerUnit.
+func topUpQuota(topUp *TopUp) (int, error) {
+	if topUp.Quota > 0 {
+		return common.QuotaFromDecimalStrict(decimal.NewFromInt(topUp.Quota))
+	}
+	return common.QuotaFromDecimalStrict(decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)))
+}
 
 func (topUp *TopUp) Insert() error {
 	var err error
@@ -442,9 +452,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 				decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 			)
 		} else {
-			quotaToAdd, quotaErr = common.QuotaFromDecimalStrict(
-				decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-			)
+			quotaToAdd, quotaErr = topUpQuota(topUp)
 		}
 		if quotaErr != nil || quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
@@ -729,9 +737,7 @@ func RechargePayOS(tradeNo string, paidVND int64, callerIp string) (alreadyDone 
 			return ErrPaymentAmountMismatch
 		}
 		var quotaErr error
-		quotaToAdd, quotaErr = common.QuotaFromDecimalStrict(
-			decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-		)
+		quotaToAdd, quotaErr = topUpQuota(topUp)
 		if quotaErr != nil || quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
 		}

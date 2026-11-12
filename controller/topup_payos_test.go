@@ -291,6 +291,18 @@ func TestPayOSPayInVNDChargesExactlyAndCreditsTheFraction(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, postPayOSWebhook(signedWebhook(t, paidData(orderCode, 80000))).Code)
 	require.Equal(t, int(3.2*common.QuotaPerUnit), userQuota(t, db))
+	// Mức đặt sẵn $2: đơn cũng ghi cố định số đồng (50.000) và hạn mức ($2) lúc tạo.
+	recorder = httptest.NewRecorder()
+	ctx, _ = gin.CreateTestContext(recorder)
+	ctx.Set("id", 7)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/user/payos/pay", strings.NewReader(`{"amount":2}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	RequestPayOSPay(ctx)
+	require.Equal(t, int64(50000), sentAmount)
+	var preset model.TopUp
+	require.NoError(t, db.Where("user_id = ? AND money = ?", 7, 50000).First(&preset).Error)
+	require.Equal(t, int64(2*common.QuotaPerUnit), preset.Quota)
+	require.Equal(t, int64(2), preset.Amount)
 }
 
 func TestPayOSAmountInVNDEchoesTheSumAndChecksTheMinimum(t *testing.T) {

@@ -6,19 +6,21 @@
  * admin input forms keep the configured currency (lib/currency.ts billing
  * helpers and getCurrencyDisplay()).
  *
- * Rates come from the KBS app (https://app.kimbox.studio/api/storage/fx-rates,
- * open.er-api.com, refreshed every few hours), cached in the browser for 6 h;
- * fallback rates until they arrive.
+ * Rates come from the KBS app (https://app.kimbox.studio/api/storage/fx-rates),
+ * cached in the browser for 30 min; fallback rates until they arrive. Dong is
+ * the payOS top-up rate (owner 12/11: top up 30.000 ₫ and the wallet shows
+ * 30.000 ₫ - the same rate both ways, so the books never drift), shown to the
+ * whole dong; NT$ follows the market rate (open.er-api.com).
  */
 import i18next from 'i18next'
 
 export type LanguageCurrency = 'VND' | 'TWD'
 
 const FX_URL = 'https://app.kimbox.studio/api/storage/fx-rates'
-const STORAGE_KEY = 'kbs.fxRates'
-const MAX_AGE_MS = 6 * 60 * 60 * 1000
+const STORAGE_KEY = 'kbs.fxRates.v2'
+const MAX_AGE_MS = 30 * 60 * 1000
 
-let rates: Record<LanguageCurrency, number> = { VND: 26000, TWD: 32 }
+let rates: Record<LanguageCurrency, number> = { VND: 25000, TWD: 32 }
 
 function acceptRates(next: Record<string, unknown> | null | undefined) {
   const vnd = Number(next?.VND)
@@ -37,7 +39,7 @@ export function languageMoney(): { currency: LanguageCurrency; rate: number } | 
   return null
 }
 
-/** "256.600 ₫", "NT$329" - dong rounded to 100 ₫ from 1.000 ₫ up. */
+/** "256.637 ₫", "NT$329" - dong to the whole dong (balances must match what was paid). */
 export function formatLanguageMoney(
   amount: number,
   currency: LanguageCurrency,
@@ -45,14 +47,16 @@ export function formatLanguageMoney(
 ): string {
   const abs = Math.abs(amount)
   if (currency === 'VND') {
-    const value = abs >= 1000 ? Math.round(amount / 100) * 100 : abs >= 1 ? Math.round(amount) : amount
+    const value = abs >= 1 ? Math.round(amount) : amount
     const text = new Intl.NumberFormat('vi-VN', {
       notation: options.compact ? 'compact' : 'standard',
       maximumFractionDigits: abs >= 1 ? 0 : 2,
     }).format(value)
     return options.showSymbol === false ? text : `${text} ₫`
   }
-  const digits = abs >= 100 ? 0 : abs >= 1 ? 1 : 2
+  let digits = 2
+  if (abs >= 100) digits = 0
+  else if (abs >= 1) digits = 1
   const text = new Intl.NumberFormat('zh-TW', {
     notation: options.compact ? 'compact' : 'standard',
     maximumFractionDigits: options.compact ? 1 : digits,

@@ -98,6 +98,9 @@ func GetStatus(c *gin.Context) {
 		"usd_exchange_rate": operation_setting.USDExchangeRate,
 		"price":             operation_setting.Price,
 		"stripe_unit_price": setting.StripeUnitPrice,
+		// KBS (12/11): tỉ giá nạp payOS (đồng / $1). Trang KBS's API và app KBS hiện tiền đồng theo đúng tỉ giá này -
+		// nạp 30.000 ₫ thì ví hiện 30.000 ₫ - thay cho tỉ giá thị trường; 0 khi payOS chưa bật.
+		"payos_unit_price": payOSDisplayRate(),
 
 		// 面板启用开关
 		"api_info_enabled":      cs.ApiInfoEnabled,

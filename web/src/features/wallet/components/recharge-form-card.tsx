@@ -34,7 +34,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
+import { languageMoney } from '@/lib/view-currency'
 import { cn } from '@/lib/utils'
 
 import { PAYMENT_TYPES } from '../constants'
@@ -150,6 +152,8 @@ export function RechargeFormCard({
 
   // Nạp bằng VNĐ: ô gõ số đồng (bỏ dấu chấm / phẩy ngăn nghìn), hiện lại có dấu ngăn nghìn.
   const vndMode = vndUnitPrice > 0 && !!onTopupVndChange
+  // Giao diện tiếng Việt hiện tín dụng bằng đồng theo đúng tỉ giá nạp: mức nạp 200.000 ₫ = tín dụng 200.000 ₫, khỏi ghi lại.
+  const creditInDong = languageMoney()?.currency === 'VND'
   const vndOf = (usd: number) => Math.round(usd * vndUnitPrice)
   const [localVnd, setLocalVnd] = useState('')
   useEffect(() => {
@@ -313,10 +317,11 @@ export function RechargeFormCard({
                           </div>
                           <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
                             {vndMode ? (
-                              <>
-                                {t('You get')} {amountPrefix}
-                                {formatNumber(displayValue)}
-                              </>
+                              !creditInDong && (
+                                <>
+                                  {t('You get')} {formatCurrencyFromUSD(displayValue)}
+                                </>
+                              )
                             ) : (
                               <>
                                 {t('Pay')} {formatCurrency(actualPrice)}
@@ -374,8 +379,7 @@ export function RechargeFormCard({
                     </span>
                     {vndMode && (
                       <span className='text-sm font-semibold'>
-                        {amountPrefix}
-                        {formatCurrency(topupAmount)}
+                        {formatCurrencyFromUSD(topupAmount)}
                       </span>
                     )}
                     {!vndMode && calculating && <Skeleton className='h-5 w-16' />}

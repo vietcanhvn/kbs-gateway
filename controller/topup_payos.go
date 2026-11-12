@@ -215,6 +215,14 @@ type PayOSPayRequest struct {
 	MoneyVND int64 `json:"money_vnd"`
 }
 
+// payOSDisplayRate: tỉ giá nạp công khai trong /api/status (0 khi payOS chưa bật / chưa có tỉ giá).
+func payOSDisplayRate() float64 {
+	if !setting.PayOSEnabled || setting.PayOSUnitPrice <= 0 {
+		return 0
+	}
+	return setting.PayOSUnitPrice
+}
+
 // payOSMaxVND: một đơn nạp theo VNĐ tối đa 1 tỷ đồng (chặn số gõ nhầm; payOS cũng có giới hạn riêng).
 const payOSMaxVND = 1_000_000_000
 
@@ -324,6 +332,10 @@ func RequestPayOSPay(c *gin.Context) {
 				amount = 1
 			}
 		}
+		// Ghi cố định hạn mức ngay lúc tạo đơn (12/11 anh Tiếp: "phải tính đúng tỷ lệ tiền chuyển đổi ở thời điểm đó"): mỗi
+		// đơn payOS có cả số đồng thu (Money) lẫn hạn mức cộng (Quota) - tỉ giá của lần nạp suy ra đúng từ hai số này, đổi
+		// tỉ giá sau này không làm lệch sổ.
+		quota = int64(math.Round(float64(amount) * common.QuotaPerUnit))
 	}
 
 	orderCode := newPayOSOrderCode()

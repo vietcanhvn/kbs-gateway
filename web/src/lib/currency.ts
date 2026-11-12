@@ -497,7 +497,7 @@ export function formatBillingCurrencyFromUSD(
 
 /**
  * KBS: a USD amount in the admin-configured currency only (never the interface
- * language's): what a payment credited, as the payment history shows it.
+ * language's) - the fallback of formatBillingCurrencyFromUSD.
  */
 export function formatPaymentCurrencyFromUSD(
   amountUSD: number | null | undefined,

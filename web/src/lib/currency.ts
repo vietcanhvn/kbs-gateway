@@ -484,6 +484,27 @@ export function formatBillingCurrencyFromUSD(
 ): string {
   if (amountUSD == null || Number.isNaN(amountUSD)) return '-'
 
+  // KBS: prices (usage logs, dynamic pricing) follow the interface language's currency (₫ / NT$) too.
+  const { config } = getCurrencyDisplay()
+  const billingMeta = getBillingDisplayMeta(config)
+  const local = billingMeta.kind === 'currency' && billingMeta.currencyCode === 'USD' ? languageMoney() : null
+  if (local) {
+    const merged = mergeOptions(options)
+    return formatLanguageMoney(amountUSD * local.rate, local.currency, { showSymbol: merged.showSymbol, compact: merged.compact })
+  }
+  return formatPaymentCurrencyFromUSD(amountUSD, options)
+}
+
+/**
+ * KBS: a USD amount in the admin-configured currency only (never the interface
+ * language's): what a payment credited, as the payment history shows it.
+ */
+export function formatPaymentCurrencyFromUSD(
+  amountUSD: number | null | undefined,
+  options?: CurrencyFormatOptions
+): string {
+  if (amountUSD == null || Number.isNaN(amountUSD)) return '-'
+
   const { config } = getCurrencyDisplay()
   const meta = getBillingDisplayMeta(config)
   const merged = mergeOptions(options)

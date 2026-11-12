@@ -63,6 +63,11 @@ export function normalizeInterfaceLanguage(value?: string | null): string {
 export function convertDetectedLanguage(value: string): string {
   const lower = value.trim().replaceAll('_', '-').toLowerCase()
   if (!lower.startsWith('zh')) return value
+  // KBS (12/11): our own codes come back from the localStorage cache - "zhTW"
+  // used to fall through to zhCN, so a Traditional Chinese reader got
+  // Simplified Chinese after a reload.
+  if (lower === 'zhtw') return 'zhTW'
+  if (lower === 'zhcn') return 'zhCN'
   if (
     lower === 'zh-tw' ||
     lower === 'zh-hk' ||

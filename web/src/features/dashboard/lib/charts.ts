@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { formatLanguageMoney, languageMoney } from '@/lib/view-currency'
 import { dataScheme as vchartDefaultDataScheme } from '@visactor/vchart/esm/theme/color-scheme/builtin/default'
 
 import { MAX_CHART_TREND_POINTS } from '@/features/dashboard/constants'
@@ -54,6 +55,9 @@ function renderQuotaCompat(rawQuota: number, digits = 4): string {
   const { config, meta } = getCurrencyDisplay()
   if (meta.kind === 'tokens') return rawQuota.toLocaleString()
   const usd = rawQuota / config.quotaPerUnit
+  // KBS: statistics in the interface language's currency (₫ / NT$) - lib/view-currency.ts.
+  const local = meta.kind === 'currency' && meta.currencyCode === 'USD' ? languageMoney() : null
+  if (local) return formatLanguageMoney(usd * local.rate, local.currency)
   const rate = 'exchangeRate' in meta ? meta.exchangeRate : 1
   const symbol = 'symbol' in meta ? meta.symbol : '$'
   const value = usd * rate

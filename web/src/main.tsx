@@ -34,6 +34,7 @@ import { applyFaviconToDom } from '@/lib/dom-utils'
 import '@/lib/dayjs'
 import { initializeFrontendCache } from '@/lib/frontend-cache'
 import { handleServerError } from '@/lib/handle-server-error'
+import { loadFxRates } from '@/lib/view-currency'
 
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
@@ -48,6 +49,8 @@ import './styles/index.css'
 // Ensure VChart theme is initialized before any chart mounts (prevents white default theme flash)
 // VChart theme is driven by our ThemeProvider (html.light/html.dark) via per-chart `theme` prop.
 initializeFrontendCache()
+// KBS: exchange rates for showing money in the interface language's currency (lib/view-currency.ts).
+void loadFxRates()
 installBuildMetadata()
 
 const queryClient = new QueryClient({

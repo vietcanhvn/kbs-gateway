@@ -78,6 +78,7 @@ For commercial licensing, please contact support@quantumnous.com
  * 4. **Billing displays**: Use formatBillingCurrencyFromUSD() to avoid token display
  * 5. **Effective exchange rate**: When quotaDisplayType is 'USD', use rate of 1 regardless of config
  */
+import { formatLanguageMoney, languageMoney } from './view-currency'
 import {
   useSystemConfigStore,
   DEFAULT_CURRENCY_CONFIG,
@@ -413,6 +414,15 @@ export function formatCurrencyFromUSD(
 
   const { config, meta } = getCurrencyDisplay()
   const merged = mergeOptions(options)
+
+  // KBS: USD amounts are shown in the interface language's currency (₫ / NT$) - lib/view-currency.ts.
+  const local = meta.kind === 'currency' && meta.currencyCode === 'USD' ? languageMoney() : null
+  if (local) {
+    return formatLanguageMoney(amountUSD * local.rate, local.currency, {
+      showSymbol: merged.showSymbol,
+      compact: merged.compact,
+    })
+  }
 
   if (meta.kind === 'tokens') {
     const tokens = amountUSD * config.quotaPerUnit

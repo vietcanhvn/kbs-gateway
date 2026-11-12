@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
-import { formatCurrencyFromUSD } from '@/lib/currency'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 
 import { useBillingHistory } from '../../hooks/use-billing-history'
@@ -241,7 +241,8 @@ export function BillingHistoryDialog({
                             {t('Amount')}
                           </Label>
                           <div className='text-sm font-semibold'>
-                            {formatCurrencyFromUSD(record.amount, {
+                            {/* KBS: credited amount of a payment - keep the configured currency, not the interface language's (12/11). */}
+                            {formatBillingCurrencyFromUSD(record.amount, {
                               digitsLarge: 2,
                               digitsSmall: 2,
                               abbreviate: false,

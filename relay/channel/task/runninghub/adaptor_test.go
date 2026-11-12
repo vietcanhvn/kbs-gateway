@@ -483,3 +483,37 @@ func TestSubmitSendsTheStoredWorkflowForSendWorkflowModels(t *testing.T) {
 	assert.Equal(t, apiJSON, sent["workflow"], "the area's own API JSON goes with the task")
 	assert.Equal(t, "2109524748351197186", sent["workflowId"])
 }
+
+// KBS 12/11: per-call picture workflows bill their measured multiplier for a
+// bigger tier (a 4K picture used to cost the same as a 1K one).
+func TestPerCallPictureBillsTheResolutionTier(t *testing.T) {
+	setupRegistryDB(t)
+	mapping := mediaworkflow.InputMapping{Inputs: []mediaworkflow.InputBinding{
+		{Role: mediaworkflow.RolePrompt, NodeID: "6", Field: "value"},
+		{Role: mediaworkflow.RoleMegapixels, NodeID: "7", Field: "megapixels", ValueType: "float", Value: 2.0, Max: ptr(8.3), BaseResolution: "1k"},
+	}, Billing: "per_call", ResolutionPrices: map[string]float64{"2k": 1.6, "4k": 3.2}}
+	mappingJSON, _ := common.Marshal(mapping)
+	require.NoError(t, (&model.MediaWorkflow{
+		ModelName: "rh-test-picture", WorkflowID: "2120387676189171714", MediaKind: mediaworkflow.KindImage,
+		Executor: model.MediaWorkflowExecutorRunningHub, ApiJSON: "{}", InputMapping: string(mappingJSON),
+		OutputNodes: `["16"]`, PromptTemplate: "{}", Enabled: true,
+	}).Insert())
+	bill := func(resolution string) map[string]float64 {
+		request := map[string]any{"model": "rh-test-picture", "prompt": "a lemon tree"}
+		if resolution != "" {
+			request["metadata"] = map[string]any{"resolution": resolution}
+		}
+		body, _ := common.Marshal(request)
+		c, _ := newTaskContext(t, string(body))
+		info := &relaycommon.RelayInfo{OriginModelName: "rh-test-picture", TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+			ChannelMeta: &relaycommon.ChannelMeta{ApiKey: "rh-key", UpstreamModelName: "rh-test-picture"}}
+		adaptor := &TaskAdaptor{}
+		adaptor.Init(info)
+		require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+		return adaptor.EstimateBilling(c, info)
+	}
+	assert.Nil(t, bill(""), "no tier: the model price once")
+	assert.Nil(t, bill("1k"), "the base tier: the model price once")
+	assert.Equal(t, map[string]float64{"resolution": 1.6}, bill("2k"))
+	assert.Equal(t, map[string]float64{"resolution": 3.2}, bill("4k"))
+}

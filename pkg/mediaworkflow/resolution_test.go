@@ -85,3 +85,31 @@ func TestAnalyzeFindsMegapixelsInputs(t *testing.T) {
 	assert.Equal(t, "float", found["megapixels@27.value"].ValueType)
 	assert.EqualValues(t, 1, found["megapixels@27.value"].Value)
 }
+
+// KBS 12/11: a picture workflow's default (2 MP) is a 1K picture; 2K / 4K scale
+// from there, and a request without a tier keeps the default.
+func TestBaseResolutionForPictureWorkflows(t *testing.T) {
+	maxMP := 8.3
+	mapping := InputMapping{
+		Inputs:           []InputBinding{{Role: RoleMegapixels, NodeID: "7", Field: "megapixels", ValueType: "float", Value: 2.0, Max: &maxMP, BaseResolution: "1k"}},
+		Billing:          "per_call",
+		ResolutionPrices: map[string]float64{"2k": 1.6, "4k": 3.2},
+	}
+	megapixels := func(tier string) any {
+		overrides, err := BuildNodeOverrides(mapping, MediaRequest{Resolution: tier})
+		require.NoError(t, err)
+		for _, override := range overrides {
+			if override.NodeID == "7" {
+				return override.FieldValue
+			}
+		}
+		return nil
+	}
+	assert.Nil(t, megapixels(""), "no tier: the workflow default (2 MP) stays")
+	assert.Equal(t, 2.0, megapixels("1k"))
+	assert.Equal(t, 3.56, megapixels("2k"))
+	assert.Equal(t, 8.0, megapixels("4k"))
+	assert.Equal(t, 1.0, mapping.ResolutionPriceRatio("1k"))
+	assert.Equal(t, 1.6, mapping.ResolutionPriceRatio("2k"))
+	assert.Equal(t, 3.2, mapping.ResolutionPriceRatio("4k"))
+}

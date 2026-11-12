@@ -104,7 +104,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 // price is charged once per task.
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	workflow, err := LoadWorkflow(info.UpstreamModelName)
-	if err != nil || workflow.Mapping.Billing != "per_second" {
+	if err != nil {
 		return nil
 	}
 	req, err := relaycommon.GetTaskRequest(c)
@@ -113,6 +113,15 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	}
 	inputs, err := taskInputs(req)
 	if err != nil {
+		return nil
+	}
+	// Per-call workflows (pictures): the model price is the base tier's; a
+	// bigger tier (2K / 4K) costs its measured multiplier (KBS 12/11 - a 4K
+	// picture was billed like a 1K one).
+	if workflow.Mapping.Billing != "per_second" {
+		if ratio := workflow.Mapping.ResolutionPriceRatio(inputs.Resolution); ratio != 1 {
+			return map[string]float64{"resolution": math.Round(ratio*1000) / 1000}
+		}
 		return nil
 	}
 	billing := map[string]float64{}

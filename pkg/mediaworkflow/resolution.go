@@ -103,6 +103,10 @@ func resolutionValue(binding InputBinding, req MediaRequest) (any, bool) {
 		return nil, false
 	}
 	ratio := ResolutionPixelRatio(req.Resolution)
+	// Value stands for its base tier (720p unless the binding names one).
+	if baseTier := strings.TrimSpace(binding.BaseResolution); KnownResolution(baseTier) {
+		ratio /= ResolutionPixelRatio(baseTier)
+	}
 	base, hasBase := numberOf(binding.Value)
 	var value float64
 	switch binding.Role {

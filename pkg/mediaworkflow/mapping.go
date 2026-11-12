@@ -57,6 +57,10 @@ type InputBinding struct {
 	ValueType string            `json:"value_type,omitempty"`
 	Enum      map[string]string `json:"enum,omitempty"`
 	Value     any               `json:"value,omitempty"`
+	// BaseResolution is the tier Value stands for on a megapixels / long_edge
+	// binding ("1k" for an image workflow whose 2 MP default is a 1K picture);
+	// empty means 720p. A request without a tier keeps Value as it is.
+	BaseResolution string `json:"base_resolution,omitempty"`
 }
 
 // NodeOverride is one entry of RunningHub's nodeInfoList (and what a

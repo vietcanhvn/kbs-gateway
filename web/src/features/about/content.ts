@@ -41,11 +41,11 @@ function vi(name: string): string {
 - **Nạp tiền bằng VietQR.** Chuyển khoản từ ngân hàng Việt Nam, số dư cộng tự động.
 - **Tương thích chuẩn OpenAI và Gemini.** Dùng được ngay với các công cụ và thư viện sẵn có.
 - **Minh bạch.** Mỗi lần gọi đều được ghi lại: mô hình nào, lúc nào, hết bao nhiêu.
-- **Sinh ra cho người làm phim AI.** ${name} là cổng AI của KimStudio Box (KSB) - bộ công cụ làm phim AI từ kịch bản, nhân vật, bối cảnh, phân cảnh tới video.
+- **Sinh ra cho người làm phim AI.** ${name} là cổng AI của KimBox Studio (KSB) - bộ công cụ làm phim AI từ kịch bản, nhân vật, bối cảnh, phân cảnh tới video.
 
 ## Dành cho ai
 
-- **Người dùng KimStudio Box**: nạp tiền một nơi, dùng mọi tính năng AI trong KSB.
+- **Người dùng KimBox Studio**: nạp tiền một nơi, dùng mọi tính năng AI trong KSB.
 - **Lập trình viên và nhóm sản phẩm**: gọi nhiều mô hình qua một địa chỉ, một hoá đơn.
 - **Nhóm sáng tạo nội dung**: thử nhanh mô hình ảnh, video mới mà không phải tự cài đặt.
 
@@ -74,11 +74,11 @@ function en(name: string): string {
 - **Top up with VietQR.** A transfer from a Vietnamese bank, credited automatically.
 - **OpenAI and Gemini compatible.** Works with the tools and libraries you already use.
 - **Transparent.** Every call is logged: which model, when, and what it cost.
-- **Built for AI filmmakers.** ${name} is the AI gateway of KimStudio Box (KSB), the AI filmmaking toolkit - from script, characters, settings and scenes to video.
+- **Built for AI filmmakers.** ${name} is the AI gateway of KimBox Studio (KSB), the AI filmmaking toolkit - from script, characters, settings and scenes to video.
 
 ## Who it is for
 
-- **KimStudio Box users**: one place to top up, every AI feature in KSB.
+- **KimBox Studio users**: one place to top up, every AI feature in KSB.
 - **Developers and product teams**: many models through one address and one bill.
 - **Content teams**: try new image and video models without hosting them.
 

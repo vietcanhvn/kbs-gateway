@@ -83,7 +83,7 @@ Các mục **Ví**, **Khóa API**, **Nhật ký…** nằm ở cột bên trái,
 - Khi tạo có thể đặt hạn ngạch (số tiền tối đa khóa được tiêu) và ngày hết hạn cho khóa.
 - Nếu lộ khóa: vào **Khóa API**, xoá khóa cũ rồi tạo khóa mới.
 
-## Dùng với KimStudio Box (KSB)
+## Dùng với KimBox Studio (KSB)
 
 Trong KSB mở **Cấu hình → KBS API** và điền:
 
@@ -212,7 +212,7 @@ function en({ name, origin }: GuideContext): string {
 - You can set a spending limit and an expiry date when creating a key.
 - If a key leaks: open **API Keys**, delete it and create a new one.
 
-## Using it with KimStudio Box (KSB)
+## Using it with KimBox Studio (KSB)
 
 In KSB open **Settings → KBS API** and fill in:
 
